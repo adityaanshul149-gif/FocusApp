@@ -1,0 +1,19 @@
+﻿{
+  "name": "Focus",
+  "short_name": "Focus",
+  "description": "A mindful study operating system for CAT preparation.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080706",
+  "theme_color": "#080706",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
