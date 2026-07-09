@@ -1,9 +1,9 @@
 ﻿const COUNTDOWN_START = new Date("2026-07-09T00:00:00");
 const STARTING_DAYS = 136;
-const STORAGE_KEY = "focus.study.os.v1";
+const STORAGE_KEY = "focus.study.os.v2";
 
 const defaults = {
-  stats: { streak: 7, averageHours: 6.4, totalHours: 184, completedSubjects: 41, heat: [0,1,2,0,3,2,1,0,2,3,1,2,0,2,1,3,2,0,1,2,3,3,1,0,2,2,3,1,0,2,3,2,1,2,3,0,2,1,3,2,1,0] },
+  stats: { streak: 0, studyDays: 0, averageHours: 0, totalHours: 0, completedSubjects: 0, lastStudyDate: "", heat: Array(42).fill(0) },
   modes: [
     { id: "focused", name: "Focused", hours: 6, note: "Sustainable deep work" },
     { id: "intensive", name: "Intensive", hours: 8, note: "Serious but steady" },
@@ -49,6 +49,8 @@ function loadState() {
 }
 
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function daysBetween(from, to) { return Math.round((new Date(to) - new Date(from)) / 86400000); }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 function daysRemaining() {
@@ -99,8 +101,8 @@ function dashboard() {
     </section>
     <section class="metric-grid">
       ${metric(state.stats.streak, "Current streak")}
-      ${metric(`${state.stats.averageHours}h`, "Average daily study")}
-      ${metric(`${state.stats.totalHours}h`, "Total study hours")}
+      ${metric(`${Number(state.stats.averageHours || 0).toFixed(1)}h`, "Average daily study")}
+      ${metric(`${Number(state.stats.totalHours || 0).toFixed(1)}h`, "Total study hours")}
       ${metric(state.stats.completedSubjects, "Completed subjects")}
     </section>
   `;
@@ -247,16 +249,38 @@ function tick() {
 function finishSession() {
   clearInterval(ticker);
   const hours = live.timeline.filter((x) => x.type === "study").reduce((sum, x) => sum + x.minutes / 60, 0);
-  const subjects = live.timeline.filter((x) => x.type === "study").length;
-  state.stats.totalHours = Math.round((state.stats.totalHours + hours) * 10) / 10;
-  state.stats.averageHours = Math.round(((state.stats.averageHours + hours) / 2) * 10) / 10;
-  state.stats.streak += 1;
-  state.stats.completedSubjects += subjects;
-  state.stats.heat = [...state.stats.heat.slice(1), 3];
+  const subjects = new Set(live.timeline.filter((x) => x.type === "study").map((x) => x.subject)).size;
+  applySessionStats(hours, subjects);
   saveState();
   live = null;
-  app.innerHTML = `<main class="screen"><section class="summary-card"><p class="eyebrow">Session complete</p><h1>Quiet work done.</h1><div class="metric-grid">${metric(`${hours.toFixed(1)}h`, "Today's study")}${metric(subjects, "Completed blocks")}${metric(state.stats.streak, "Current streak")}${metric("+1", "Day protected")}</div><button class="primary-btn" data-action="home">Done</button></section></main>`;
+  app.innerHTML = `<main class="screen"><section class="summary-card"><p class="eyebrow">Session complete</p><h1>Quiet work done.</h1><div class="metric-grid">${metric(`${hours.toFixed(1)}h`, "Today's study")}${metric(subjects, "Completed subjects")}${metric(state.stats.streak, "Current streak")}${metric("+1", "Day protected")}</div><button class="primary-btn" data-action="home">Done</button></section></main>`;
   bindEvents();
+}
+
+function applySessionStats(hours, subjects) {
+  const today = todayKey();
+  const sameDay = state.stats.lastStudyDate === today;
+  const yesterday = state.stats.lastStudyDate && daysBetween(state.stats.lastStudyDate, today) === 1;
+  state.stats.totalHours = Math.round((Number(state.stats.totalHours || 0) + hours) * 10) / 10;
+  state.stats.completedSubjects = Number(state.stats.completedSubjects || 0) + subjects;
+  if (!sameDay) {
+    state.stats.studyDays = Number(state.stats.studyDays || 0) + 1;
+    state.stats.streak = yesterday ? Number(state.stats.streak || 0) + 1 : 1;
+    state.stats.lastStudyDate = today;
+    state.stats.heat = [...(state.stats.heat || Array(42).fill(0)).slice(-41), heatLevel(hours)];
+  } else {
+    const heat = [...(state.stats.heat || Array(42).fill(0))];
+    heat[heat.length - 1] = Math.max(heat[heat.length - 1] || 0, heatLevel(hours));
+    state.stats.heat = heat;
+  }
+  state.stats.averageHours = state.stats.studyDays ? Math.round((state.stats.totalHours / state.stats.studyDays) * 10) / 10 : 0;
+}
+
+function heatLevel(hours) {
+  if (hours >= 8) return 3;
+  if (hours >= 4) return 2;
+  if (hours > 0) return 1;
+  return 0;
 }
 
 function bindEvents() {
@@ -320,6 +344,7 @@ function setupDrag() {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 document.documentElement.style.setProperty("--sun", themeColor(state.theme));
 render();
+
 
 
 
