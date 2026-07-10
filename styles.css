@@ -1252,11 +1252,11 @@ select,
 
 .study-mode .floating-stack .stack-card,
 .study-mode .floating-stack .stack-card:nth-child(n) {
-  flex-basis: 112px !important;
-  width: 112px !important;
-  min-width: 112px !important;
-  max-width: 112px !important;
-  padding: 7px 9px !important;
+  flex-basis: 100px !important;
+  width: 100px !important;
+  min-width: 100px !important;
+  max-width: 100px !important;
+  padding: 6px 8px !important;
 }
 
 .study-mode .floating-stack .stack-card strong {
@@ -1274,21 +1274,21 @@ select,
 
 @media (orientation: landscape) {
   .standby-content {
-    padding-top: 16px !important;
-    padding-bottom: 88px !important;
-    transform: translateY(-3.5vh);
+    padding-top: 30px !important;
+    padding-bottom: 70px !important;
+    transform: translateY(-1vh);
   }
 
   .standby-card .countdown {
-    font-size: clamp(116px, 25vw, 276px) !important;
+    font-size: clamp(100px, 22vw, 242px) !important;
     margin-top: 4px !important;
   }
 
   .study-mode .floating-stack {
-    right: max(22px, env(safe-area-inset-right)) !important;
-    bottom: max(30px, env(safe-area-inset-bottom)) !important;
-    width: min(42vw, 380px) !important;
-    max-width: min(42vw, 380px) !important;
+    right: max(14px, env(safe-area-inset-right)) !important;
+    bottom: max(16px, env(safe-area-inset-bottom)) !important;
+    width: min(38vw, 330px) !important;
+    max-width: min(38vw, 330px) !important;
   }
 }
 
