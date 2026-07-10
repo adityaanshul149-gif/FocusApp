@@ -265,6 +265,7 @@ function customization() {
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Sound</h2><p class="eyebrow">Soft chime when a study block completes</p></div><button class="tiny-btn" data-action="test-chime">Test chime</button></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
+    <p class="app-version">Focus app version 5.6.2</p>
   `;
 }
 
@@ -364,8 +365,7 @@ function renderLive() {
         <div class="commitment-clock"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div>
         <button class="end-session-btn" data-action="request-end-session">End</button>
         <div class="standby-content">
-          <p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p>
-          <div class="session-emoji">${item.emoji || "•"}</div>
+          <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "•"}</div></div>
           <div class="subject">${item.subject}</div>
           <div class="countdown" data-countdown>${fmtClock(live.remaining)}</div>
           <div class="live-actions">

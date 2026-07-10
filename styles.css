@@ -487,6 +487,26 @@ h3 { font-size: 17px; margin-bottom: 8px; }
   margin-bottom: 8px;
 }
 
+.session-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  justify-self: end;
+  margin: 0 0 12px;
+  max-width: min(72vw, 520px);
+}
+
+.session-kicker .eyebrow {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-kicker .session-emoji {
+  margin: 0;
+}
+
 .standby-card .subject {
   color: #fff;
   font-size: clamp(32px, 7vw, 76px);
@@ -1290,11 +1310,69 @@ select,
     width: min(38vw, 330px) !important;
     max-width: min(38vw, 330px) !important;
   }
+
+  .session-kicker {
+    margin-right: clamp(72px, 9vw, 128px);
+  }
 }
 
 @media (orientation: portrait) {
   .study-mode .floating-stack {
     opacity: .52;
+  }
+
+  .session-kicker {
+    justify-content: flex-end;
+    justify-self: center;
+    max-width: min(82vw, 360px);
+    margin-right: 0;
+  }
+}
+
+/* v17: align status label with emoji/subject and remove label shadow */
+.session-kicker {
+  justify-self: end !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  width: fit-content !important;
+  max-width: min(74vw, 520px) !important;
+  margin: 0 0 12px 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+.session-kicker .eyebrow,
+.session-kicker .session-emoji {
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+.session-kicker .session-emoji {
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, .18)) !important;
+}
+
+.app-version {
+  margin: 18px 0 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (orientation: landscape) {
+  .session-kicker {
+    margin-right: 0 !important;
+  }
+}
+
+@media (orientation: portrait) {
+  .session-kicker {
+    justify-self: center !important;
   }
 }
 
