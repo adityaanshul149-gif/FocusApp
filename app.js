@@ -79,9 +79,13 @@ const defaults = {
     { id: "quant", name: "QUANT", hours: 3, color: "#d6c4ff", emoji: "∑" }
   ],
   recovery: {
-    micro: ["Water", "Stretch", "Balcony Walk", "Eye Relaxation", "Breathing Timer"],
-    medium: ["Coffee", "Scribble", "Meditation Timer", "Balcony Walk", "Breathing Timer"],
-    enabled: ["Water", "Stretch", "Balcony Walk", "Eye Relaxation", "Breathing Timer", "Coffee", "Scribble", "Meditation Timer"]
+    micro: ["Water", "Stretch", "Balcony Walk"],
+    medium: ["Meditation", "Breathing Exercise", "Balcony Walk", "Mindful Scribbling"],
+    enabled: ["Water", "Stretch", "Balcony Walk", "Meditation", "Breathing Exercise", "Mindful Scribbling"]
+  },
+  breaks: {
+    short: { minutes: 5, everyMinutes: 45, activities: ["Drink water", "Stand up", "Balcony walk"] },
+    long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"] }
   },
   theme: "focus"
 };
@@ -105,12 +109,29 @@ function normalizeState(saved) {
   });
   saved.modes = saved.modes || defaults.modes;
   saved.recovery = { ...defaults.recovery, ...(saved.recovery || {}) };
+  saved.breaks = normalizeBreaks(saved.breaks);
   saved.stats = { ...defaults.stats, ...(saved.stats || {}) };
   saved.history = Array.isArray(saved.history) ? saved.history : [];
   saved.theme = appThemes[saved.theme] ? saved.theme : "focus";
   return saved;
 }
 
+function normalizeBreaks(breaks) {
+  const source = breaks || defaults.breaks;
+  const shortActivities = source.short?.activities?.length ? source.short.activities : defaults.breaks.short.activities;
+  const longActivities = source.long?.activities?.length ? source.long.activities : defaults.breaks.long.activities;
+  return {
+    short: {
+      minutes: clamp(Number(source.short?.minutes || defaults.breaks.short.minutes), 1, 20),
+      everyMinutes: clamp(Number(source.short?.everyMinutes || defaults.breaks.short.everyMinutes), 25, 90),
+      activities: shortActivities
+    },
+    long: {
+      minutes: clamp(Number(source.long?.minutes || defaults.breaks.long.minutes), 5, 45),
+      activities: longActivities
+    }
+  };
+}
 function loadState() {
   try { return { ...structuredClone(defaults), ...JSON.parse(localStorage.getItem(STORAGE_KEY)) }; }
   catch { return structuredClone(defaults); }
@@ -229,14 +250,17 @@ function customization() {
     <section class="panel"><div class="panel-head"><h2>Study modes</h2><button class="tiny-btn" data-action="add-mode">Add</button></div>${state.modes.map((mode) => `
       <div class="setting-row"><div><strong>${mode.name}</strong><p class="eyebrow">${mode.note}</p></div><input class="field" type="number" min="1" max="14" value="${mode.hours}" data-mode-hours="${mode.id}" /></div>
     `).join("")}</section>
-    <section class="panel"><div class="panel-head"><h2>Default plan</h2><span class="total-pill">${fmtHours(totalSubjectHours())}</span></div>${state.subjects.map((subject) => `
-      <div class="setting-row"><div><strong>${subject.name}</strong><p class="eyebrow">Default block</p></div><input class="field" type="number" min="0.5" max="8" step="0.5" value="${subject.hours}" data-subject-hours="${subject.id}" /></div>
-    `).join("")}</section>
-    <section class="panel"><div class="panel-head"><h2>Recovery</h2></div><div class="activity-list">${allActivities().map((activity) => `<button class="chip ${state.recovery.enabled.includes(activity) ? "active" : ""}" data-activity="${activity}">${activity}</button>`).join("")}</div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Breaks</h2><p class="eyebrow">Breaks are outside study hours. Stopwatch counts them; focus time does not.</p></div></div>
+      ${breakEditor("short", "Short breaks", `Every ${state.breaks.short.everyMinutes}m of study`, state.breaks.short)}
+      ${breakEditor("long", "Long breaks", "After each subject", state.breaks.long)}
+    </section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
   `;
 }
 
+function breakEditor(type, title, note, config) {
+  return `<div class="break-editor"><div class="break-head"><div><strong>${title}</strong><p class="eyebrow">${note}</p></div><label class="mini-field"><span>Minutes</span><input class="field" type="number" min="1" max="45" value="${config.minutes}" data-break-field="${type}:minutes"></label>${type === "short" ? `<label class="mini-field"><span>Every</span><input class="field" type="number" min="25" max="90" value="${config.everyMinutes}" data-break-field="${type}:everyMinutes"></label>` : ""}</div><div class="break-list">${config.activities.map((activity, index) => `<div class="break-row"><input class="field break-name" value="${escapeHtml(activity)}" data-break-activity="${type}:${index}"><button class="tiny-btn" data-remove-break="${type}:${index}">Remove</button></div>`).join("")}</div><button class="soft-btn add-break" data-add-break="${type}">Add ${type === "short" ? "short" : "long"} break</button></div>`;
+}
 function themeMood(id) {
   return { focus: "Clean and bright", monk: "Quiet and grounded", intensive: "Warm and decisive", flow: "Soft and fluid" }[id];
 }
@@ -274,28 +298,31 @@ function startFlow() {
 function buildTimeline(plan) {
   const timeline = [];
   let lastRecovery = "";
+  const shortBreak = state.breaks.short;
+  const longBreak = state.breaks.long;
   plan.forEach((subject, subjectIndex) => {
-    const parts = Math.max(1, Math.round(subject.hours));
-    const segmentMinutes = Math.round((subject.hours * 60) / parts);
-    for (let i = 0; i < parts; i++) {
-      timeline.push({ type: "study", subject: subject.name, minutes: segmentMinutes, color: subject.color, emoji: subject.emoji || "•" });
-      if (i < parts - 1) {
-        const activity = pickActivity(state.recovery.micro, lastRecovery);
+    const studyMinutes = Math.round(subject.hours * 60);
+    const studyParts = Math.max(1, Math.ceil(studyMinutes / shortBreak.everyMinutes));
+    const segmentMinutes = Math.round(studyMinutes / studyParts);
+    for (let i = 0; i < studyParts; i++) {
+      const minutes = i === studyParts - 1 ? studyMinutes - segmentMinutes * (studyParts - 1) : segmentMinutes;
+      timeline.push({ type: "study", subject: subject.name, minutes, color: subject.color, emoji: subject.emoji || "•" });
+      if (i < studyParts - 1 && shortBreak.activities.length) {
+        const activity = pickActivity(shortBreak.activities, lastRecovery);
         lastRecovery = activity;
-        timeline.push({ type: "micro", subject: activity, minutes: i % 2 ? 4 : 3, color: subject.color, emoji: recoveryEmoji(activity) });
+        timeline.push({ type: "micro", subject: activity, minutes: shortBreak.minutes, color: subject.color, emoji: recoveryEmoji(activity) });
       }
     }
-    if (subjectIndex < plan.length - 1) {
-      const activity = pickActivity(state.recovery.medium, lastRecovery);
+    if (subjectIndex < plan.length - 1 && longBreak.activities.length) {
+      const activity = pickActivity(longBreak.activities, lastRecovery);
       lastRecovery = activity;
-      timeline.push({ type: "medium", subject: activity, minutes: subjectIndex % 2 ? 15 : 12, color: subject.color, emoji: recoveryEmoji(activity) });
+      timeline.push({ type: "medium", subject: activity, minutes: longBreak.minutes, color: subject.color, emoji: recoveryEmoji(activity) });
     }
   });
   return timeline;
 }
 function pickActivity(list, previous) {
-  const enabled = list.filter((item) => state.recovery.enabled.includes(item));
-  const pool = enabled.length ? enabled : list;
+  const pool = list.filter(Boolean);
   return pool.find((item) => item !== previous) || pool[0];
 }
 
@@ -351,7 +378,15 @@ function endSessionDialog() {
 
 function recoveryLabel(type) { return type === "micro" ? "Micro recovery" : "Medium recovery"; }
 function recoveryEmoji(activity) {
-  return { "Water": "💧", "Stretch": "🙆", "Balcony Walk": "🌿", "Eye Relaxation": "👁", "Breathing Timer": "◌", "Coffee": "☕", "Scribble": "✎", "Meditation Timer": "🧘" }[activity] || "•";
+  const key = activity.toLowerCase();
+  if (key.includes("water")) return "💧";
+  if (key.includes("stand") || key.includes("stretch")) return "🙆";
+  if (key.includes("balcony") || key.includes("walk")) return "🌿";
+  if (key.includes("breath")) return "◌";
+  if (key.includes("meditat")) return "🧘";
+  if (key.includes("scribbl") || key.includes("write")) return "✎";
+  if (key.includes("coffee")) return "☕";
+  return "•";
 }
 function tick() {
   if (!live) return;
@@ -508,6 +543,32 @@ function bindEvents() {
     state.recovery.enabled = state.recovery.enabled.includes(activity) ? state.recovery.enabled.filter((x) => x !== activity) : [...state.recovery.enabled, activity];
     saveState(); render();
   }));
+  document.querySelectorAll("[data-break-field]").forEach((input) => input.addEventListener("change", () => {
+    const [type, field] = input.dataset.breakField.split(":");
+    state.breaks[type][field] = Number(input.value);
+    state.breaks = normalizeBreaks(state.breaks);
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-break-activity]").forEach((input) => input.addEventListener("change", () => {
+    const [type, index] = input.dataset.breakActivity.split(":");
+    state.breaks[type].activities[Number(index)] = input.value.trim() || "Quiet reset";
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-add-break]").forEach((btn) => btn.addEventListener("click", () => {
+    const type = btn.dataset.addBreak;
+    state.breaks[type].activities.push(type === "short" ? "Drink water" : "Breathing exercise");
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-remove-break]").forEach((btn) => btn.addEventListener("click", () => {
+    const [type, index] = btn.dataset.removeBreak.split(":");
+    if (state.breaks[type].activities.length <= 1) return;
+    state.breaks[type].activities.splice(Number(index), 1);
+    saveState();
+    render();
+  }));
   document.querySelectorAll("[data-theme]").forEach((btn) => btn.addEventListener("click", () => { state.theme = btn.dataset.theme; applyTheme(); saveState(); render(); }));
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
@@ -572,6 +633,10 @@ function setupDrag() {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 applyTheme();
 render();
+
+
+
+
 
 
 
