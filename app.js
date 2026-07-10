@@ -1,6 +1,6 @@
 ﻿const COUNTDOWN_START = new Date("2026-07-09T00:00:00");
 const STARTING_DAYS = 136;
-const STORAGE_KEY = "focus.study.os.v3";
+const STORAGE_KEY = "focus.study.os.v5";
 
 const appThemes = {
   focus: {
@@ -84,7 +84,7 @@ const defaults = {
     enabled: ["Water", "Stretch", "Balcony Walk", "Meditation", "Breathing Exercise", "Mindful Scribbling"]
   },
   breaks: {
-    short: { minutes: 5, everyMinutes: 45, activities: ["Drink water", "Stand up", "Balcony walk"] },
+    short: { minutes: 5, everyMinutes: 50, activities: ["Drink water", "Stand up", "Balcony walk"] },
     long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"] }
   },
   theme: "focus"
@@ -123,7 +123,7 @@ function normalizeBreaks(breaks) {
   return {
     short: {
       minutes: clamp(Number(source.short?.minutes || defaults.breaks.short.minutes), 1, 20),
-      everyMinutes: clamp(Number(source.short?.everyMinutes || defaults.breaks.short.everyMinutes), 25, 90),
+      everyMinutes: normalizeStudyChunkMinutes(source.short?.everyMinutes),
       activities: shortActivities
     },
     long: {
@@ -141,12 +141,21 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 function daysBetween(from, to) { return Math.round((new Date(to) - new Date(from)) / 86400000); }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function normalizeStudyChunkMinutes(value) {
+  const minutes = Number(value || defaults.breaks.short.everyMinutes);
+  return clamp(minutes === 45 ? 50 : minutes, 25, 90);
+}
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function daysRemaining() {
   const elapsedDays = Math.floor((new Date() - COUNTDOWN_START) / 86400000);
   return Math.max(0, STARTING_DAYS - elapsedDays);
 }
 function fmtHours(hours) { return `${Number(hours).toFixed(hours % 1 ? 1 : 0)}h`; }
+function fmtPlanDuration(hours) {
+  const minutes = Math.round(Number(hours) * 60);
+  if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}h`;
+  return `${minutes}m`;
+}
 function fmtDuration(seconds) {
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
@@ -254,6 +263,7 @@ function customization() {
       ${breakEditor("short", "Short breaks", `Every ${state.breaks.short.everyMinutes}m of study`, state.breaks.short)}
       ${breakEditor("long", "Long breaks", "After each subject", state.breaks.long)}
     </section>
+    <section class="panel"><div class="panel-head"><div><h2>Sound</h2><p class="eyebrow">Soft chime when a study block completes</p></div><button class="tiny-btn" data-action="test-chime">Test chime</button></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
   `;
 }
@@ -291,7 +301,7 @@ function startFlow() {
   const valid = Math.abs(total - mode.hours) < 0.01;
   return `
     <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · ${fmtHours(mode.hours)}</p><h2>Today's plan</h2></div><span class="total-pill ${valid ? "good" : "bad"}">${fmtHours(total)}</span></div>
-    <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" draggable="${flow.editing}" data-index="${i}"><div class="drag">${flow.editing ? "=" : "↓"}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtHours(s.hours)}</p></div>${flow.editing ? `<div class="subject-stepper"><button data-nudge="${i}:-0.5">-</button><button data-nudge="${i}:0.5">+</button></div>` : ""}</article>`).join("")}</div>
+    <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" draggable="${flow.editing}" data-index="${i}"><div class="drag">${flow.editing ? "=" : "↓"}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtPlanDuration(s.hours)}</p></div>${flow.editing ? `<div class="subject-stepper"><button data-nudge="${i}:-30">-</button><button data-nudge="${i}:30">+</button></div>` : ""}</article>`).join("")}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="confirm-plan" ${valid ? "" : "disabled"}>Confirm and lock</button><button class="soft-btn" data-action="toggle-edit">${flow.editing ? "Done editing" : "Edit"}</button><button class="tiny-btn" data-action="close-flow">Cancel</button></div></section></div>`;
 }
 
@@ -300,14 +310,14 @@ function buildTimeline(plan) {
   let lastRecovery = "";
   const shortBreak = state.breaks.short;
   const longBreak = state.breaks.long;
+  const maxStudyChunk = normalizeStudyChunkMinutes(shortBreak.everyMinutes);
   plan.forEach((subject, subjectIndex) => {
-    const studyMinutes = Math.round(subject.hours * 60);
-    const studyParts = Math.max(1, Math.ceil(studyMinutes / shortBreak.everyMinutes));
-    const segmentMinutes = Math.round(studyMinutes / studyParts);
-    for (let i = 0; i < studyParts; i++) {
-      const minutes = i === studyParts - 1 ? studyMinutes - segmentMinutes * (studyParts - 1) : segmentMinutes;
+    let remainingStudyMinutes = Math.round(subject.hours * 60);
+    while (remainingStudyMinutes > 0) {
+      const minutes = Math.min(maxStudyChunk, remainingStudyMinutes);
       timeline.push({ type: "study", subject: subject.name, minutes, color: subject.color, emoji: subject.emoji || "•" });
-      if (i < studyParts - 1 && shortBreak.activities.length) {
+      remainingStudyMinutes -= minutes;
+      if (remainingStudyMinutes > 0 && shortBreak.activities.length) {
         const activity = pickActivity(shortBreak.activities, lastRecovery);
         lastRecovery = activity;
         timeline.push({ type: "micro", subject: activity, minutes: shortBreak.minutes, color: subject.color, emoji: recoveryEmoji(activity) });
@@ -326,13 +336,13 @@ function pickActivity(list, previous) {
   return pool.find((item) => item !== previous) || pool[0];
 }
 
-function startLive() {
+async function startLive() {
   flow.plan = flow.plan.map((s) => ({ ...s, id: s.id || uid() }));
   const timeline = buildTimeline(flow.plan);
   live = {
     id: uid(), timeline, index: 0, remaining: timeline[0].minutes * 60, paused: false,
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
-    focusedMs: 0, lastTickAt: performance.now(), endStep: null, endReason: ""
+    focusedMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null
   };
   flow = null;
   render();
@@ -344,7 +354,7 @@ function renderLive() {
   const duration = item.minutes * 60;
   const itemLeft = clamp((live.remaining / duration) * 100, 0, 100);
   const isRecovery = item.type !== "study";
-  const upcoming = live.timeline.slice(live.index + 1, live.index + 4);
+  const upcoming = live.timeline.slice(live.index + 1);
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
   app.innerHTML = `
     <main class="study-mode" style="--card-color:${item.color}; --card-left:${itemLeft}%; --black-width:${100 - itemLeft}%">
@@ -358,15 +368,24 @@ function renderLive() {
           <div class="session-emoji">${item.emoji || "•"}</div>
           <div class="subject">${item.subject}</div>
           <div class="countdown" data-countdown>${fmtClock(live.remaining)}</div>
-          <button class="pause-btn ${live.paused ? "is-paused" : ""}" data-action="pause-live">${live.paused ? "Resume" : "Pause"}</button>
+          <div class="live-actions">
+            <button class="pause-btn ${live.paused ? "is-paused" : ""}" data-action="pause-live">${live.paused ? "Resume" : "Pause"}</button>
+            ${isRecovery ? `<button class="skip-break-btn" data-action="request-skip-break">Skip</button>` : ""}
+          </div>
         </div>
       </section>
-      <aside class="floating-stack">${upcoming.map((x) => `<div class="stack-card next-${x.type}" style="--mini-color:${x.color}"><span>${x.emoji || "•"}</span><strong>${x.subject}</strong><small>${x.type === "study" ? "Study" : "Break"} · ${x.minutes}m</small></div>`).join("")}</aside>
+      <aside class="floating-stack">${upcoming.map((x) => `<div class="stack-card next-${x.type}" style="--mini-color:${x.color}"><span>${x.emoji || "•"}</span><strong>${x.subject}</strong><small><b>${x.minutes}m</b> ${x.type === "study" ? "study" : "break"}</small></div>`).join("")}</aside>
       ${live.endStep ? endSessionDialog() : ""}
+      ${live.skipStep ? skipBreakDialog() : ""}
     </main>
   `;
   bindEvents();
   ticker = setInterval(tick, 1000);
+}
+
+function skipBreakDialog() {
+  return `
+    <div class="overlay end-overlay"><section class="sheet confirm-sheet"><p class="eyebrow">Tiny check-in</p><h2>Skip this break? 🌿</h2><p class="copy">Your brain might need these few minutes. If you still feel clear and ready, you can return to study now.</p><div class="sheet-actions"><button class="soft-btn" data-action="keep-break">Take the break</button><button class="tiny-btn skip-confirm" data-action="confirm-skip-break">Yes, skip break</button></div></section></div>`;
 }
 
 function endSessionDialog() {
@@ -487,25 +506,39 @@ function applySessionStats(hours, subjects) {
 }
 function heatLevel(hours) { return hours >= 8 ? 3 : hours >= 4 ? 2 : hours > 0 ? 1 : 0; }
 
-function playCompletionChime() {
+async function playCompletionChime() {
+  try {
+    await unlockAudio();
+    const now = audioContext.currentTime;
+    const master = audioContext.createGain();
+    master.gain.setValueAtTime(0.9, now);
+    master.connect(audioContext.destination);
+    [0, 0.46].forEach((ringOffset) => {
+      [880, 1320, 1760].forEach((freq, index) => {
+        const start = now + ringOffset + index * 0.012;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = index === 0 ? "sine" : "triangle";
+        osc.frequency.setValueAtTime(freq, start);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.985, start + 0.55);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime([0.2, 0.08, 0.04][index], start + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.64);
+        osc.connect(gain).connect(master);
+        osc.start(start);
+        osc.stop(start + 0.68);
+      });
+    });
+  } catch (error) {
+    console.warn("Chime could not play", error);
+  }
+}
+async function unlockAudio() {
   try {
     audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
-    const now = audioContext.currentTime;
-    [523.25, 659.25, 783.99].forEach((freq, index) => {
-      const osc = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, now + index * 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.055, now + index * 0.08 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 0.42);
-      osc.connect(gain).connect(audioContext.destination);
-      osc.start(now + index * 0.08);
-      osc.stop(now + index * 0.08 + 0.46);
-    });
+    if (audioContext.state === "suspended") await audioContext.resume();
   } catch {}
 }
-
 function modalView() {
   if (modal.type === "edit-confirm") return `<div class="overlay"><section class="sheet"><p class="eyebrow">Edit history</p><h2>Are you sure you want to edit this study record?</h2><p class="copy">A little friction keeps your record trustworthy.</p><div class="sheet-actions"><button class="primary-btn" data-action="open-edit-record">Yes, edit</button><button class="tiny-btn" data-action="close-modal">Cancel</button></div></section></div>`;
   if (modal.type === "edit-record") {
@@ -527,7 +560,7 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-nudge]").forEach((btn) => btn.addEventListener("click", () => {
     const [index, delta] = btn.dataset.nudge.split(":").map(Number);
-    flow.plan[index].hours = clamp(flow.plan[index].hours + delta, 0.5, 10);
+    flow.plan[index].hours = clamp(Math.round((flow.plan[index].hours + delta / 60) * 2) / 2, 0.5, 10);
     render();
   }));
   document.querySelectorAll("[data-mode-hours]").forEach((input) => input.addEventListener("change", () => {
@@ -587,13 +620,18 @@ function updateModalDraft(input) {
 }
 
 function handleAction(event) {
+  unlockAudio();
   const action = event.currentTarget.dataset.action;
   if (action === "open-start") openStart();
   if (action === "close-flow") { flow = null; render(); }
   if (action === "load-plan") { flow.step = "plan"; render(); }
   if (action === "toggle-edit") { flow.editing = !flow.editing; render(); }
   if (action === "confirm-plan") startLive();
+  if (action === "test-chime") playCompletionChime();
   if (action === "pause-live") togglePause();
+  if (action === "request-skip-break") { live.skipStep = "confirm"; renderLive(); }
+  if (action === "keep-break") { live.skipStep = null; live.lastTickAt = performance.now(); renderLive(); }
+  if (action === "confirm-skip-break") skipCurrentBreak();
   if (action === "request-end-session") { live.endStep = "confirm"; renderLive(); }
   if (action === "resume-session") { live.endStep = null; live.endReason = ""; live.lastTickAt = performance.now(); renderLive(); }
   if (action === "show-end-reason") { live.endStep = "reason"; renderLive(); }
@@ -603,6 +641,18 @@ function handleAction(event) {
   if (action === "close-modal") { modal = null; render(); }
   if (action === "open-edit-record") { const record = state.history.find((item) => item.id === modal.id); modal = { type: "edit-record", id: modal.id, draft: { ...record } }; render(); }
   if (action === "save-record-edit") { state.history = state.history.map((item) => item.id === modal.id ? { ...modal.draft } : item); saveState(); modal = null; render(); }
+}
+
+function skipCurrentBreak() {
+  if (!live) return;
+  const item = live.timeline[live.index];
+  if (item.type === "study") return;
+  live.skipStep = null;
+  live.index += 1;
+  if (live.index >= live.timeline.length) return finishSession("Completed");
+  live.remaining = live.timeline[live.index].minutes * 60;
+  live.lastTickAt = performance.now();
+  renderLive();
 }
 
 function togglePause() {
@@ -630,9 +680,19 @@ function setupDrag() {
   });
 }
 
+let lastTouchEnd = 0;
+document.addEventListener("touchend", (event) => {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) event.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 applyTheme();
 render();
+
+
+
+
 
 
 

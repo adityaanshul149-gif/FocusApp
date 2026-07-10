@@ -1073,3 +1073,169 @@ select.field { appearance: none; }
   .break-head { grid-template-columns: 1fr 86px; }
   .break-head .mini-field:nth-child(3) { grid-column: 2; }
 }
+
+/* v7 testing, chime, upcoming pills, and anti-zoom refinements */
+html,
+body,
+button,
+input,
+textarea,
+select,
+.app-shell {
+  touch-action: manipulation;
+}
+
+.study-mode .floating-stack {
+  max-width: min(54vw, 520px) !important;
+  max-height: min(44vh, 260px);
+  overflow: auto;
+  flex-wrap: wrap;
+  align-content: flex-end;
+  scrollbar-width: none;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+}
+
+.study-mode .floating-stack::-webkit-scrollbar {
+  display: none;
+}
+
+.study-mode .floating-stack .stack-card:nth-child(n) {
+  display: grid !important;
+}
+
+.study-mode .floating-stack .stack-card {
+  opacity: .9 !important;
+  transform: scale(.9) !important;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    "icon name"
+    "icon time";
+  row-gap: 2px;
+  column-gap: 7px;
+}
+
+.study-mode .floating-stack .stack-card span { grid-area: icon; align-self: center; }
+.study-mode .floating-stack .stack-card strong { grid-area: name; max-width: 88px !important; }
+.study-mode .floating-stack .stack-card small { grid-area: time; font-size: 11px !important; }
+.study-mode .floating-stack .stack-card small b {
+  color: #101820;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+@media (orientation: landscape) {
+  .study-mode .floating-stack {
+    right: 18px !important;
+    bottom: 18px !important;
+    max-width: min(46vw, 560px) !important;
+  }
+}
+
+/* v8 upcoming stack sanity: show a few clear pills, not the whole day */
+.study-mode .floating-stack {
+  max-width: min(48vw, 520px) !important;
+  max-height: min(34vh, 210px);
+}
+
+.study-mode .floating-stack .more-card {
+  background: rgba(0, 0, 0, .38) !important;
+  color: #fff !important;
+}
+
+.study-mode .floating-stack .more-card strong,
+.study-mode .floating-stack .more-card small {
+  color: #fff !important;
+}
+
+.sound-note { color: var(--muted); font-size: 12px; }
+
+/* v10: break skip control and horizontal upcoming rail */
+.standby-content .live-actions {
+  position: absolute;
+  z-index: 7;
+  left: clamp(28px, 5vw, 64px);
+  bottom: clamp(30px, 7vh, 66px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.standby-card .live-actions .pause-btn {
+  position: static;
+  left: auto;
+  bottom: auto;
+}
+
+.skip-break-btn {
+  min-height: clamp(54px, 8vw, 68px);
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .86);
+  color: #17202a;
+  border: 2px solid rgba(0, 0, 0, .08);
+  font-weight: 950;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .16);
+}
+
+.skip-confirm {
+  color: #17202a;
+  background: #a7d8ff;
+  font-weight: 950;
+}
+
+.study-mode .floating-stack {
+  position: absolute !important;
+  top: auto !important;
+  left: auto !important;
+  right: max(18px, env(safe-area-inset-right)) !important;
+  bottom: max(18px, env(safe-area-inset-bottom)) !important;
+  width: min(46vw, 410px) !important;
+  max-width: min(46vw, 410px) !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 6px 4px !important;
+  pointer-events: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.study-mode .floating-stack::-webkit-scrollbar {
+  display: none;
+}
+
+.study-mode .floating-stack .stack-card,
+.study-mode .floating-stack .stack-card:nth-child(n) {
+  display: grid !important;
+  flex: 0 0 124px !important;
+  width: 124px !important;
+  min-width: 124px !important;
+  max-width: 124px !important;
+  transform: none !important;
+  opacity: .92 !important;
+  scroll-snap-align: end;
+}
+
+@media (orientation: portrait) {
+  .standby-content .live-actions {
+    left: 22px;
+    bottom: 22px;
+  }
+
+  .study-mode .floating-stack {
+    right: 14px !important;
+    bottom: 14px !important;
+    width: min(58vw, 340px) !important;
+    max-width: min(58vw, 340px) !important;
+  }
+}
+
