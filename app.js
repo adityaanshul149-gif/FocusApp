@@ -380,6 +380,7 @@ function renderLive() {
     </main>
   `;
   bindEvents();
+  setupUpcomingRail();
   ticker = setInterval(tick, 1000);
 }
 
@@ -678,6 +679,20 @@ function setupDrag() {
       render();
     });
   });
+}
+
+let upcomingRailTimer = null;
+function setupUpcomingRail() {
+  const rail = document.querySelector(".floating-stack");
+  if (!rail) return;
+  const wakeRail = () => {
+    rail.classList.add("is-active");
+    clearTimeout(upcomingRailTimer);
+    upcomingRailTimer = setTimeout(() => rail.classList.remove("is-active"), 1800);
+  };
+  rail.addEventListener("pointerdown", wakeRail);
+  rail.addEventListener("pointermove", wakeRail);
+  rail.addEventListener("scroll", wakeRail, { passive: true });
 }
 
 let lastTouchEnd = 0;

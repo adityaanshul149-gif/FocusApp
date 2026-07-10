@@ -1239,3 +1239,62 @@ select,
   }
 }
 
+/* v13: cleaner landscape spacing and quiet upcoming rail */
+.study-mode .floating-stack {
+  opacity: .38;
+  transition: opacity 700ms ease;
+}
+
+.study-mode .floating-stack:is(:hover, :focus-within, .is-active) {
+  opacity: 1;
+  transition-duration: 180ms;
+}
+
+.study-mode .floating-stack .stack-card,
+.study-mode .floating-stack .stack-card:nth-child(n) {
+  flex-basis: 112px !important;
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  padding: 7px 9px !important;
+}
+
+.study-mode .floating-stack .stack-card strong {
+  max-width: 76px !important;
+  font-size: 12px !important;
+}
+
+.study-mode .floating-stack .stack-card small {
+  font-size: 10px !important;
+}
+
+.study-mode .floating-stack .stack-card small b {
+  font-size: 12px !important;
+}
+
+@media (orientation: landscape) {
+  .standby-content {
+    padding-top: 16px !important;
+    padding-bottom: 88px !important;
+    transform: translateY(-3.5vh);
+  }
+
+  .standby-card .countdown {
+    font-size: clamp(116px, 25vw, 276px) !important;
+    margin-top: 4px !important;
+  }
+
+  .study-mode .floating-stack {
+    right: max(22px, env(safe-area-inset-right)) !important;
+    bottom: max(30px, env(safe-area-inset-bottom)) !important;
+    width: min(42vw, 380px) !important;
+    max-width: min(42vw, 380px) !important;
+  }
+}
+
+@media (orientation: portrait) {
+  .study-mode .floating-stack {
+    opacity: .52;
+  }
+}
+
