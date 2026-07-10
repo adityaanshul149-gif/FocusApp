@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = "focus-pwa-v2";
+﻿const CACHE_NAME = "focus-pwa-v5";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -12,4 +12,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
 });
+
+
+
 
