@@ -1,4 +1,4 @@
-const CACHE_NAME = "focus-pwa-v22";
+const CACHE_NAME = "focus-pwa-v25";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
