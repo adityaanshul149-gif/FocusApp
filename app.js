@@ -288,7 +288,7 @@ function emptyHistory() {
 
 function historyTable(rows) {
   return `
-    <div class="history-actions"><button class="tiny-btn danger-lite" data-action="clear-history">Delete history</button></div>
+    <div class="history-actions"><button class="history-delete" data-action="clear-history">Clear</button></div>
     <table class="history-table">
       <thead><tr><th>Date</th><th>Total</th><th>Focus</th><th>Pomodoros</th><th>Status</th><th>Reason</th><th></th></tr></thead>
       <tbody>${rows.map((record) => `
@@ -878,7 +878,7 @@ function handleAction(event) {
   if (action === "show-end-reason") { live.endStep = "reason"; renderLive(); }
   if (action === "confirm-end-session" && live.endReason.trim()) finishSession("Ended Early", live.endReason);
   if (action === "home") { view = "dashboard"; render(); }
-  if (action === "clear-history") { if (confirm("Delete all study history from this device?")) { state.history = []; saveState(); render(); } }
+  if (action === "clear-history") { if (confirm("Permanently delete all study history from this device?")) { state.history = []; saveState(); render(); } }
   if (action === "add-mode") { state.modes.push({ id: uid(), name: "Custom", hours: 7, note: "Your quiet plan" }); saveState(); render(); }
   if (action === "close-modal") { modal = null; render(); }
   if (action === "open-edit-record") { const record = state.history.find((item) => item.id === modal.id); modal = { type: "edit-record", id: modal.id, draft: { ...record } }; render(); }

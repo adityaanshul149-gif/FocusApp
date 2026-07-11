@@ -893,7 +893,17 @@ h3 { font-size: 17px; margin-bottom: 8px; }
 .history-actions {
   display: flex;
   justify-content: flex-end;
-  padding: 10px 12px 0;
+  padding: 6px 10px 0;
+}
+.history-delete {
+  min-height: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 55%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  opacity: .45;
 }
 .history-table { width: 100%; border-collapse: collapse; min-width: 720px; font-size: 13px; }
 .history-table th, .history-table td { padding: 13px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
