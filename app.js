@@ -84,10 +84,11 @@ const defaults = {
     enabled: ["Water", "Stretch", "Balcony Walk", "Meditation", "Breathing Exercise", "Mindful Scribbling"]
   },
   breaks: {
-    short: { minutes: 5, everyMinutes: 50, activities: ["Drink water", "Stand up", "Balcony walk"] },
-    long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"] }
+    short: { minutes: 5, everyMinutes: 50, activities: ["Drink water", "Stand up", "Balcony walk"], emojis: { "Drink water": "💧", "Stand up": "🙆", "Balcony walk": "🌿" } },
+    long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"], emojis: { "Meditation": "🧘", "Breathing exercise": "◌", "Balcony walk": "🌿", "Mindful scribbling": "✎" } }
   },
-  theme: "focus"
+  theme: "focus",
+  sound: "steady"
 };
 
 let state = normalizeState(loadState());
@@ -113,6 +114,7 @@ function normalizeState(saved) {
   saved.stats = { ...defaults.stats, ...(saved.stats || {}) };
   saved.history = Array.isArray(saved.history) ? saved.history : [];
   saved.theme = appThemes[saved.theme] ? saved.theme : "focus";
+  saved.sound = saved.sound || defaults.sound;
   return saved;
 }
 
@@ -124,11 +126,13 @@ function normalizeBreaks(breaks) {
     short: {
       minutes: clamp(Number(source.short?.minutes || defaults.breaks.short.minutes), 1, 20),
       everyMinutes: normalizeStudyChunkMinutes(source.short?.everyMinutes),
-      activities: shortActivities
+      activities: shortActivities,
+      emojis: { ...defaults.breaks.short.emojis, ...(source.short?.emojis || {}) }
     },
     long: {
       minutes: clamp(Number(source.long?.minutes || defaults.breaks.long.minutes), 5, 45),
-      activities: longActivities
+      activities: longActivities,
+      emojis: { ...defaults.breaks.long.emojis, ...(source.long?.emojis || {}) }
     }
   };
 }
@@ -143,7 +147,7 @@ function daysBetween(from, to) { return Math.round((new Date(to) - new Date(from
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function normalizeStudyChunkMinutes(value) {
   const minutes = Number(value || defaults.breaks.short.everyMinutes);
-  return clamp(minutes === 45 ? 50 : minutes, 25, 90);
+  return clamp(minutes === 45 ? 50 : minutes, 25, 60);
 }
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function daysRemaining() {
@@ -263,14 +267,22 @@ function customization() {
       ${breakEditor("short", "Short breaks", `Every ${state.breaks.short.everyMinutes}m of study`, state.breaks.short)}
       ${breakEditor("long", "Long breaks", "After each subject", state.breaks.long)}
     </section>
-    <section class="panel"><div class="panel-head"><div><h2>Sound</h2><p class="eyebrow">Soft chime when a study block completes</p></div><button class="tiny-btn" data-action="test-chime">Test chime</button></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
     <p class="app-version">Focus app version 6.0.1</p>
   `;
 }
 
 function breakEditor(type, title, note, config) {
-  return `<div class="break-editor"><div class="break-head"><div><strong>${title}</strong><p class="eyebrow">${note}</p></div><label class="mini-field"><span>Minutes</span><input class="field" type="number" min="1" max="45" value="${config.minutes}" data-break-field="${type}:minutes"></label>${type === "short" ? `<label class="mini-field"><span>Every</span><input class="field" type="number" min="25" max="90" value="${config.everyMinutes}" data-break-field="${type}:everyMinutes"></label>` : ""}</div><div class="break-list">${config.activities.map((activity, index) => `<div class="break-row"><input class="field break-name" value="${escapeHtml(activity)}" data-break-activity="${type}:${index}"><button class="tiny-btn" data-remove-break="${type}:${index}">Remove</button></div>`).join("")}</div><button class="soft-btn add-break" data-add-break="${type}">Add ${type === "short" ? "short" : "long"} break</button></div>`;
+  return `<div class="break-editor"><div class="break-head"><div><strong>${title}</strong><p class="eyebrow">${note}</p></div><label class="mini-field"><span>Minutes</span><input class="field" type="number" min="1" max="45" value="${config.minutes}" data-break-field="${type}:minutes"></label>${type === "short" ? `<label class="mini-field"><span>Every</span><input class="field" type="number" min="25" max="60" value="${config.everyMinutes}" data-break-field="${type}:everyMinutes"></label>` : ""}</div><div class="break-list">${config.activities.map((activity, index) => `<div class="break-row emoji-break-row"><input class="field break-emoji" value="${escapeHtml(config.emojis?.[activity] || recoveryEmoji(activity))}" maxlength="3" data-break-emoji="${type}:${index}"><input class="field break-name" value="${escapeHtml(activity)}" data-break-activity="${type}:${index}"><button class="tiny-btn" data-remove-break="${type}:${index}">Remove</button></div>`).join("")}</div><button class="soft-btn add-break" data-add-break="${type}">Add ${type === "short" ? "short" : "long"} break</button></div>`;
+}
+function soundOptions() {
+  return [
+    { id: "steady", name: "Steady Beep", freq: 1850, gain: .34 },
+    { id: "bright", name: "Bright Beep", freq: 2300, gain: .28 },
+    { id: "urgent", name: "Urgent Beep", freq: 2650, gain: .36 },
+    { id: "piercing", name: "Max Beep", freq: 3100, gain: .32 }
+  ];
 }
 function themeMood(id) {
   return { focus: "Clean and bright", monk: "Quiet and grounded", intensive: "Warm and decisive", flow: "Soft and fluid" }[id];
@@ -320,8 +332,13 @@ function breakReviewFlow(mode) {
 function breakChoices(type) {
   return (type === "medium" ? state.breaks.long.activities : state.breaks.short.activities).filter(Boolean);
 }
+function breakEmoji(type, activity) {
+  return (type === "medium" ? state.breaks.long.emojis : state.breaks.short.emojis)?.[activity] || recoveryEmoji(activity);
+}
 function canMergeAround(index) {
-  return flow.timeline[index - 1]?.type === "study" && flow.timeline[index + 1]?.type === "study" && flow.timeline[index - 1].subject === flow.timeline[index + 1].subject;
+  const before = flow.timeline[index - 1];
+  const after = flow.timeline[index + 1];
+  return before?.type === "study" && after?.type === "study" && before.subject === after.subject && before.minutes + after.minutes <= 60;
 }
 function mergeAroundBreak(index) {
   if (!canMergeAround(index)) return flow.timeline.splice(index, 1);
@@ -344,13 +361,13 @@ function buildTimeline(plan) {
       if (remainingStudyMinutes > 0 && shortBreak.activities.length) {
         const activity = pickActivity(shortBreak.activities, lastRecovery);
         lastRecovery = activity;
-        timeline.push({ type: "micro", subject: activity, minutes: shortBreak.minutes, color: subject.color, emoji: recoveryEmoji(activity) });
+        timeline.push({ type: "micro", subject: activity, minutes: shortBreak.minutes, color: subject.color, emoji: breakEmoji("micro", activity) });
       }
     }
     if (subjectIndex < plan.length - 1 && longBreak.activities.length) {
       const activity = pickActivity(longBreak.activities, lastRecovery);
       lastRecovery = activity;
-      timeline.push({ type: "medium", subject: activity, minutes: longBreak.minutes, color: subject.color, emoji: recoveryEmoji(activity) });
+      timeline.push({ type: "medium", subject: activity, minutes: longBreak.minutes, color: subject.color, emoji: breakEmoji("medium", activity) });
     }
   });
   return timeline;
@@ -370,7 +387,10 @@ async function startLive() {
 async function runStartupSequence(timeline) {
   await playMainNotification();
   app.className = "app-shell live-shell";
-  app.innerHTML = `<main class="countdown-start"><p>Starting in...</p><div class="countdown-number" data-start-count>3</div></main>`;
+  app.innerHTML = `<main class="countdown-start launch-intro"><p>Locking in</p><h1>Starting study session now</h1></main>`;
+  setTimeout(() => {
+    app.innerHTML = `<main class="countdown-start"><p>Starting in...</p><div class="countdown-number" data-start-count>3</div></main>`;
+  }, 2000);
   [3, 2, 1].forEach((num, i) => {
     setTimeout(() => {
       const el = document.querySelector("[data-start-count]");
@@ -381,9 +401,9 @@ async function runStartupSequence(timeline) {
         el.classList.add("pulse");
       }
       playCountdownBeep();
-    }, i * 1000);
+    }, 2000 + i * 1000);
   });
-  setTimeout(() => beginLive(timeline), 3100);
+  setTimeout(() => beginLive(timeline), 5100);
 }
 
 function beginLive(timeline) {
@@ -556,23 +576,22 @@ async function playMainNotification() {
   try {
     await unlockAudio();
     const now = audioContext.currentTime;
+    const selected = soundOptions().find((sound) => sound.id === state.sound) || soundOptions()[0];
     const master = audioContext.createGain();
     master.gain.setValueAtTime(1, now);
     master.connect(audioContext.destination);
-    [0, 0.32, 0.64, 0.96].forEach((offset) => {
-      [1900, 2550].forEach((freq, index) => {
-        const start = now + offset + index * 0.018;
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.type = "square";
-        osc.frequency.setValueAtTime(freq, start);
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(index ? 0.18 : 0.32, start + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
-        osc.connect(gain).connect(master);
-        osc.start(start);
-        osc.stop(start + 0.23);
-      });
+    [selected.freq, selected.freq * 1.015].forEach((freq, index) => {
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.type = index ? "sine" : "square";
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(index ? selected.gain * .34 : selected.gain, now + 0.035);
+      gain.gain.setValueAtTime(index ? selected.gain * .34 : selected.gain, now + 1.86);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 2);
+      osc.connect(gain).connect(master);
+      osc.start(now);
+      osc.stop(now + 2.05);
     });
   } catch (error) {
     console.warn("Chime could not play", error);
@@ -658,23 +677,34 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-break-activity]").forEach((input) => input.addEventListener("change", () => {
     const [type, index] = input.dataset.breakActivity.split(":");
+    const oldName = state.breaks[type].activities[Number(index)];
     state.breaks[type].activities[Number(index)] = input.value.trim() || "Quiet reset";
+    state.breaks[type].emojis[state.breaks[type].activities[Number(index)]] = state.breaks[type].emojis[oldName] || recoveryEmoji(state.breaks[type].activities[Number(index)]);
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-break-emoji]").forEach((input) => input.addEventListener("change", () => {
+    const [type, index] = input.dataset.breakEmoji.split(":");
+    state.breaks[type].emojis[state.breaks[type].activities[Number(index)]] = input.value.trim() || "•";
     saveState();
     render();
   }));
   document.querySelectorAll("[data-add-break]").forEach((btn) => btn.addEventListener("click", () => {
     const type = btn.dataset.addBreak;
     state.breaks[type].activities.push(type === "short" ? "Drink water" : "Breathing exercise");
+    state.breaks[type].emojis[state.breaks[type].activities.at(-1)] = type === "short" ? "💧" : "◌";
     saveState();
     render();
   }));
   document.querySelectorAll("[data-remove-break]").forEach((btn) => btn.addEventListener("click", () => {
     const [type, index] = btn.dataset.removeBreak.split(":");
     if (state.breaks[type].activities.length <= 1) return;
-    state.breaks[type].activities.splice(Number(index), 1);
+    const [removed] = state.breaks[type].activities.splice(Number(index), 1);
+    delete state.breaks[type].emojis[removed];
     saveState();
     render();
   }));
+  document.querySelectorAll("[data-sound]").forEach((btn) => btn.addEventListener("click", () => { state.sound = btn.dataset.sound; saveState(); render(); playMainNotification(); }));
   document.querySelectorAll("[data-theme]").forEach((btn) => btn.addEventListener("click", () => { state.theme = btn.dataset.theme; applyTheme(); saveState(); render(); }));
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
@@ -686,14 +716,14 @@ function bindEvents() {
     else {
       const choices = breakChoices(input.value);
       const subject = choices[0] || "Quiet reset";
-      flow.timeline[index] = { ...flow.timeline[index], type: input.value, minutes: input.value === "micro" ? state.breaks.short.minutes : state.breaks.long.minutes, subject, emoji: recoveryEmoji(subject) };
+      flow.timeline[index] = { ...flow.timeline[index], type: input.value, minutes: input.value === "micro" ? state.breaks.short.minutes : state.breaks.long.minutes, subject, emoji: breakEmoji(input.value, subject) };
     }
     render();
   }));
   document.querySelectorAll("[data-break-choice]").forEach((input) => input.addEventListener("change", () => {
     const index = Number(input.dataset.breakChoice);
     flow.timeline[index].subject = input.value;
-    flow.timeline[index].emoji = recoveryEmoji(input.value);
+    flow.timeline[index].emoji = breakEmoji(flow.timeline[index].type, input.value);
     render();
   }));
   setupDrag();
