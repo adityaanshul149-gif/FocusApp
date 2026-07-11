@@ -1105,6 +1105,64 @@ select,
   touch-action: manipulation;
 }
 
+/* v19: startup countdown, HIIT audio flow, and mode CRUD */
+.countdown-start {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  background: #050506;
+  color: #fffdf7;
+}
+
+.countdown-start p {
+  margin: 0;
+  color: rgba(255,255,255,.68);
+  text-transform: uppercase;
+  font-size: clamp(16px, 3vw, 28px);
+  font-weight: 950;
+}
+
+.countdown-number {
+  font-size: clamp(120px, 30vw, 260px);
+  font-weight: 950;
+  line-height: .8;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown-number.pulse {
+  animation: countdownPulse 900ms ease both;
+}
+
+@keyframes countdownPulse {
+  0% { opacity: 0; transform: scale(.82); }
+  22% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 0; transform: scale(.92); }
+}
+
+.mode-setting {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 86px auto;
+}
+
+.mode-name-field,
+.mode-note-field {
+  width: 100%;
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .mode-setting {
+    grid-template-columns: 1fr 86px;
+  }
+
+  .mode-name-field,
+  .mode-note-field {
+    grid-column: 1 / -1;
+  }
+}
+
 .study-mode .floating-stack {
   max-width: min(54vw, 520px) !important;
   max-height: min(44vh, 260px);

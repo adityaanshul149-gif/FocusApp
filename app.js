@@ -257,7 +257,7 @@ function metric(value, label) { return `<article class="metric-card"><div class=
 function customization() {
   return `
     <section class="panel"><div class="panel-head"><h2>Study modes</h2><button class="tiny-btn" data-action="add-mode">Add</button></div>${state.modes.map((mode) => `
-      <div class="setting-row"><div><strong>${mode.name}</strong><p class="eyebrow">${mode.note}</p></div><input class="field" type="number" min="1" max="14" value="${mode.hours}" data-mode-hours="${mode.id}" /></div>
+      <div class="setting-row mode-setting"><input class="field mode-name-field" value="${escapeHtml(mode.name)}" data-mode-name="${mode.id}" /><input class="field mode-note-field" value="${escapeHtml(mode.note)}" data-mode-note="${mode.id}" /><input class="field" type="number" min="1" max="14" value="${mode.hours}" data-mode-hours="${mode.id}" />${isDefaultMode(mode.id) ? "" : `<button class="tiny-btn danger-lite" data-remove-mode="${mode.id}">Delete</button>`}</div>
     `).join("")}</section>
     <section class="panel"><div class="panel-head"><div><h2>Breaks</h2><p class="eyebrow">Breaks are outside study hours. Stopwatch counts them; focus time does not.</p></div></div>
       ${breakEditor("short", "Short breaks", `Every ${state.breaks.short.everyMinutes}m of study`, state.breaks.short)}
@@ -278,6 +278,7 @@ function themeMood(id) {
 function totalSubjectHours() { return state.subjects.reduce((sum, s) => sum + Number(s.hours), 0); }
 function allActivities() { return [...new Set([...state.recovery.micro, ...state.recovery.medium])]; }
 function themeColor(theme) { return (appThemes[theme] || appThemes.focus).accent; }
+function isDefaultMode(id) { return ["focused", "intensive", "monk"].includes(id); }
 
 function openStart() {
   flow = { step: "mode", selectedMode: state.modes[1].id, editing: false, plan: scalePlan(state.subjects, state.modes[1].hours) };
@@ -312,12 +313,20 @@ function breakReviewFlow(mode) {
     <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · break structure</p><h2>Review breaks</h2></div><button class="icon-btn" data-action="close-flow">x</button></div>
     <div class="break-plan-list">${flow.timeline.map((item, index) => item.type === "study" ? `
       <article class="break-plan-row is-study"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m study</p></div></article>` : `
-      <article class="break-plan-row"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m break</p></div><select class="field break-select" data-break-kind="${index}"><option value="micro" ${item.type === "micro" ? "selected" : ""}>Short</option><option value="medium" ${item.type === "medium" ? "selected" : ""}>Medium</option><option value="none">None</option></select><select class="field break-activity-select" data-break-choice="${index}">${breakChoices(item.type).map((choice) => `<option ${choice === item.subject ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></article>`).join("")}</div>
+      <article class="break-plan-row"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m break</p></div><select class="field break-select" data-break-kind="${index}"><option value="micro" ${item.type === "micro" ? "selected" : ""}>Short</option><option value="medium" ${item.type === "medium" ? "selected" : ""}>Medium</option><option value="none">Remove</option>${canMergeAround(index) ? `<option value="merge">Remove + merge</option>` : ""}</select><select class="field break-activity-select" data-break-choice="${index}">${breakChoices(item.type).map((choice) => `<option ${choice === item.subject ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></article>`).join("")}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="start-reviewed-session">Start session</button><button class="soft-btn" data-action="back-to-plan">Back to plan</button></div></section></div>`;
 }
 
 function breakChoices(type) {
   return (type === "medium" ? state.breaks.long.activities : state.breaks.short.activities).filter(Boolean);
+}
+function canMergeAround(index) {
+  return flow.timeline[index - 1]?.type === "study" && flow.timeline[index + 1]?.type === "study" && flow.timeline[index - 1].subject === flow.timeline[index + 1].subject;
+}
+function mergeAroundBreak(index) {
+  if (!canMergeAround(index)) return flow.timeline.splice(index, 1);
+  flow.timeline[index - 1].minutes += flow.timeline[index + 1].minutes;
+  flow.timeline.splice(index, 2);
 }
 
 function buildTimeline(plan) {
@@ -354,12 +363,35 @@ function pickActivity(list, previous) {
 async function startLive() {
   flow.plan = flow.plan.map((s) => ({ ...s, id: s.id || uid() }));
   const timeline = flow.timeline || buildTimeline(flow.plan);
+  flow = null;
+  await runStartupSequence(timeline);
+}
+
+async function runStartupSequence(timeline) {
+  await playMainNotification();
+  app.className = "app-shell live-shell";
+  app.innerHTML = `<main class="countdown-start"><p>Starting in...</p><div class="countdown-number" data-start-count>3</div></main>`;
+  [3, 2, 1].forEach((num, i) => {
+    setTimeout(() => {
+      const el = document.querySelector("[data-start-count]");
+      if (el) {
+        el.textContent = num;
+        el.classList.remove("pulse");
+        void el.offsetWidth;
+        el.classList.add("pulse");
+      }
+      playCountdownBeep();
+    }, i * 1000);
+  });
+  setTimeout(() => beginLive(timeline), 3100);
+}
+
+function beginLive(timeline) {
   live = {
     id: uid(), timeline, index: 0, remaining: timeline[0].minutes * 60, paused: false,
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
     focusedMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null
   };
-  flow = null;
   render();
 }
 
@@ -463,10 +495,8 @@ function updateLiveDisplay() {
 
 function completeCurrentBlock() {
   const item = live.timeline[live.index];
-  if (item.type === "study") {
-    live.completedPomodoros += 1;
-    playCompletionChime();
-  }
+  if (item.type === "study") live.completedPomodoros += 1;
+  playMainNotification();
   live.index += 1;
   if (live.index >= live.timeline.length) return finishSession("Completed");
   live.remaining = live.timeline[live.index].minutes * 60;
@@ -521,32 +551,48 @@ function applySessionStats(hours, subjects) {
 }
 function heatLevel(hours) { return hours >= 8 ? 3 : hours >= 4 ? 2 : hours > 0 ? 1 : 0; }
 
-async function playCompletionChime() {
+async function playCompletionChime() { return playMainNotification(); }
+async function playMainNotification() {
   try {
     await unlockAudio();
     const now = audioContext.currentTime;
     const master = audioContext.createGain();
-    master.gain.setValueAtTime(0.9, now);
+    master.gain.setValueAtTime(1, now);
     master.connect(audioContext.destination);
-    [0, 0.46].forEach((ringOffset) => {
-      [880, 1320, 1760].forEach((freq, index) => {
-        const start = now + ringOffset + index * 0.012;
+    [0, 0.32, 0.64, 0.96].forEach((offset) => {
+      [1900, 2550].forEach((freq, index) => {
+        const start = now + offset + index * 0.018;
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
-        osc.type = index === 0 ? "sine" : "triangle";
+        osc.type = "square";
         osc.frequency.setValueAtTime(freq, start);
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.985, start + 0.55);
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime([0.2, 0.08, 0.04][index], start + 0.018);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.64);
+        gain.gain.exponentialRampToValueAtTime(index ? 0.18 : 0.32, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
         osc.connect(gain).connect(master);
         osc.start(start);
-        osc.stop(start + 0.68);
+        osc.stop(start + 0.23);
       });
     });
   } catch (error) {
     console.warn("Chime could not play", error);
   }
+}
+async function playCountdownBeep() {
+  try {
+    await unlockAudio();
+    const now = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1150, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.connect(gain).connect(audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  } catch {}
 }
 async function unlockAudio() {
   try {
@@ -581,6 +627,18 @@ function bindEvents() {
   document.querySelectorAll("[data-mode-hours]").forEach((input) => input.addEventListener("change", () => {
     const mode = state.modes.find((m) => m.id === input.dataset.modeHours);
     mode.hours = clamp(Number(input.value), 1, 14); saveState(); render();
+  }));
+  document.querySelectorAll("[data-mode-name]").forEach((input) => input.addEventListener("change", () => {
+    const mode = state.modes.find((m) => m.id === input.dataset.modeName);
+    mode.name = input.value.trim() || "Custom"; saveState(); render();
+  }));
+  document.querySelectorAll("[data-mode-note]").forEach((input) => input.addEventListener("change", () => {
+    const mode = state.modes.find((m) => m.id === input.dataset.modeNote);
+    mode.note = input.value.trim() || "Your quiet plan"; saveState(); render();
+  }));
+  document.querySelectorAll("[data-remove-mode]").forEach((btn) => btn.addEventListener("click", () => {
+    state.modes = state.modes.filter((mode) => mode.id !== btn.dataset.removeMode);
+    saveState(); render();
   }));
   document.querySelectorAll("[data-subject-hours]").forEach((input) => input.addEventListener("change", () => {
     const subject = state.subjects.find((s) => s.id === input.dataset.subjectHours);
@@ -623,7 +681,8 @@ function bindEvents() {
   document.querySelectorAll("[data-record-field]").forEach((input) => input.addEventListener("input", () => updateModalDraft(input)));
   document.querySelectorAll("[data-break-kind]").forEach((input) => input.addEventListener("change", () => {
     const index = Number(input.dataset.breakKind);
-    if (input.value === "none") flow.timeline.splice(index, 1);
+    if (input.value === "merge") mergeAroundBreak(index);
+    else if (input.value === "none") flow.timeline.splice(index, 1);
     else {
       const choices = breakChoices(input.value);
       const subject = choices[0] || "Quiet reset";
@@ -660,7 +719,7 @@ function handleAction(event) {
   if (action === "confirm-plan") { flow.timeline = buildTimeline(flow.plan); flow.step = "breaks"; render(); }
   if (action === "back-to-plan") { flow.step = "plan"; render(); }
   if (action === "start-reviewed-session") startLive();
-  if (action === "test-chime") playCompletionChime();
+  if (action === "test-chime") playMainNotification();
   if (action === "pause-live") togglePause();
   if (action === "request-skip-break") { live.skipStep = "confirm"; renderLive(); }
   if (action === "keep-break") { live.skipStep = null; live.lastTickAt = performance.now(); renderLive(); }
