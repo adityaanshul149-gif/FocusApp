@@ -890,6 +890,11 @@ h3 { font-size: 17px; margin-bottom: 8px; }
 .history-intro h2 { margin: 4px 0 0; font-size: 20px; }
 .compact-start { width: auto; min-width: 104px; padding: 13px 18px; }
 .history-table-wrap { border: 1px solid var(--line); border-radius: 22px; overflow: auto; box-shadow: none; }
+.history-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 12px 0;
+}
 .history-table { width: 100%; border-collapse: collapse; min-width: 720px; font-size: 13px; }
 .history-table th, .history-table td { padding: 13px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .history-table th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 900; background: var(--panel-soft); position: sticky; top: 0; }

@@ -1,6 +1,7 @@
 const COUNTDOWN_START = new Date("2026-07-09T00:00:00");
 const STARTING_DAYS = 136;
 const STORAGE_KEY = "focus.study.os.v5";
+const ACTIVE_SESSION_KEY = "focus.study.active.session.v1";
 
 const appThemes = {
   focus: {
@@ -94,7 +95,7 @@ const defaults = {
 let state = normalizeState(loadState());
 let view = "dashboard";
 let flow = null;
-let live = null;
+let live = loadActiveSession();
 let ticker = null;
 let timelineTimer = null;
 let modal = null;
@@ -148,6 +149,41 @@ function loadState() {
 }
 
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function saveActiveSession() {
+  if (!live) return localStorage.removeItem(ACTIVE_SESSION_KEY);
+  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ ...live, savedAt: Date.now(), endStep: null, endReason: "", skipStep: null }));
+}
+function loadActiveSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ACTIVE_SESSION_KEY));
+    return saved?.timeline?.length ? reconcileActiveSession(saved) : null;
+  } catch { return null; }
+}
+function reconcileActiveSession(saved) {
+  const elapsedAway = saved.paused ? 0 : Math.max(0, (Date.now() - Number(saved.savedAt || Date.now())) / 1000);
+  saved.lastTickAt = performance.now();
+  saved.endStep = null;
+  saved.skipStep = null;
+  return advanceSavedSession(saved, elapsedAway);
+}
+function advanceSavedSession(session, seconds) {
+  let remainingSeconds = seconds;
+  while (remainingSeconds > 0 && session.index < session.timeline.length) {
+    const item = session.timeline[session.index];
+    const step = Math.min(session.remaining, remainingSeconds);
+    session.remaining -= step;
+    remainingSeconds -= step;
+    if (item.type === "study") session.focusedMs = (session.focusedMs || 0) + step * 1000;
+    session.elapsedMs = (session.elapsedMs || 0) + step * 1000;
+    if (session.remaining <= 0) {
+      if (item.type === "study") session.completedPomodoros = (session.completedPomodoros || 0) + 1;
+      session.index += 1;
+      if (session.index >= session.timeline.length) break;
+      session.remaining = session.timeline[session.index].minutes * 60;
+    }
+  }
+  return session.index >= session.timeline.length ? null : session;
+}
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 function daysBetween(from, to) { return Math.round((new Date(to) - new Date(from)) / 86400000); }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -252,6 +288,7 @@ function emptyHistory() {
 
 function historyTable(rows) {
   return `
+    <div class="history-actions"><button class="tiny-btn danger-lite" data-action="clear-history">Delete history</button></div>
     <table class="history-table">
       <thead><tr><th>Date</th><th>Total</th><th>Focus</th><th>Pomodoros</th><th>Status</th><th>Reason</th><th></th></tr></thead>
       <tbody>${rows.map((record) => `
@@ -280,7 +317,7 @@ function customization() {
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 7.0.6</p>
+    <p class="app-version">Focus app version 8.0</p>
   `;
 }
 
@@ -440,6 +477,7 @@ function beginLive(timeline) {
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
     focusedMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null
   };
+  saveActiveSession();
   render();
 }
 
@@ -514,6 +552,7 @@ function recoveryEmoji(activity) {
     if (item.type === "study") live.focusedMs = (live.focusedMs || 0) + deltaMs;
     live.remaining -= delta;
   }
+  saveActiveSession();
   if (!live.paused && live.remaining <= 0) {
     completeCurrentBlock();
     if (!live) return;
@@ -547,6 +586,7 @@ function completeCurrentBlock() {
   live.index += 1;
   if (live.index >= live.timeline.length) return finishSession("Completed");
   live.remaining = live.timeline[live.index].minutes * 60;
+  saveActiveSession();
 }
 
 function finishSession(status = "Completed", reason = "") {
@@ -568,6 +608,7 @@ function finishSession(status = "Completed", reason = "") {
   state.history = [record, ...state.history];
   if (status === "Completed") applySessionStats(focusedSeconds / 3600, completedSubjects);
   saveState();
+  localStorage.removeItem(ACTIVE_SESSION_KEY);
   live = null;
   app.innerHTML = `<main class="screen"><section class="summary-card"><p class="eyebrow">${status === "Completed" ? "Session complete" : "Session ended"}</p><h1>${status === "Completed" ? "Quiet work done." : "Logged honestly."}</h1><div class="metric-grid">${metric(fmtDuration(totalSeconds), "Total time")}${metric(fmtDuration(focusedSeconds), "Focused time")}${metric(completedPomodoros, "Pomodoros")}${metric(status, "Status")}</div><button class="primary-btn" data-action="home">Done</button></section></main>`;
   bindEvents();
@@ -638,6 +679,25 @@ async function playCountdownBeep() {
     osc.connect(gain).connect(audioContext.destination);
     osc.start(now);
     osc.stop(now + 0.18);
+  } catch {}
+}
+async function playToggleSound() {
+  try {
+    await unlockAudio();
+    const now = audioContext.currentTime;
+    [live?.paused ? 740 : 520, live?.paused ? 520 : 740].forEach((freq, index) => {
+      const start = now + index * 0.055;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.09, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.13);
+      osc.connect(gain).connect(audioContext.destination);
+      osc.start(start);
+      osc.stop(start + 0.15);
+    });
   } catch {}
 }
 async function unlockAudio() {
@@ -818,6 +878,7 @@ function handleAction(event) {
   if (action === "show-end-reason") { live.endStep = "reason"; renderLive(); }
   if (action === "confirm-end-session" && live.endReason.trim()) finishSession("Ended Early", live.endReason);
   if (action === "home") { view = "dashboard"; render(); }
+  if (action === "clear-history") { if (confirm("Delete all study history from this device?")) { state.history = []; saveState(); render(); } }
   if (action === "add-mode") { state.modes.push({ id: uid(), name: "Custom", hours: 7, note: "Your quiet plan" }); saveState(); render(); }
   if (action === "close-modal") { modal = null; render(); }
   if (action === "open-edit-record") { const record = state.history.find((item) => item.id === modal.id); modal = { type: "edit-record", id: modal.id, draft: { ...record } }; render(); }
@@ -833,17 +894,20 @@ function skipCurrentBreak() {
   if (live.index >= live.timeline.length) return finishSession("Completed");
   live.remaining = live.timeline[live.index].minutes * 60;
   live.lastTickAt = performance.now();
+  saveActiveSession();
   renderLive();
 }
 
 function togglePause() {
   if (!live) return;
+  playToggleSound();
   if (live.paused) {
     live.paused = false;
     live.lastTickAt = performance.now();
   } else {
     live.paused = true;
   }
+  saveActiveSession();
   renderLive();
 }
 
@@ -881,6 +945,11 @@ document.addEventListener("touchend", (event) => {
   if (now - lastTouchEnd <= 300) event.preventDefault();
   lastTouchEnd = now;
 }, { passive: false });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) saveActiveSession();
+});
+window.addEventListener("pagehide", saveActiveSession);
+window.addEventListener("beforeunload", saveActiveSession);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 applyTheme();
 render();
