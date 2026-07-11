@@ -1364,6 +1364,77 @@ select,
   font-weight: 800;
 }
 
+/* v18: calmer final live sizing and break review */
+.break-plan-list {
+  display: grid;
+  gap: 8px;
+}
+
+.break-plan-row {
+  display: grid;
+  grid-template-columns: auto 1fr 92px 150px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel-soft);
+}
+
+.break-plan-row.is-study {
+  grid-template-columns: auto 1fr;
+  background: transparent;
+}
+
+.break-plan-row span {
+  font-size: 18px;
+}
+
+.break-select,
+.break-activity-select {
+  width: 100%;
+  text-align: left;
+}
+
+.study-mode .floating-stack .stack-card,
+.study-mode .floating-stack .stack-card:nth-child(n) {
+  flex-basis: 90px !important;
+  width: 90px !important;
+  min-width: 90px !important;
+  max-width: 90px !important;
+  padding: 6px 7px !important;
+}
+
+@media (orientation: landscape) {
+  .standby-content {
+    transform: none !important;
+    padding-top: 36px !important;
+    padding-bottom: 62px !important;
+  }
+
+  .standby-card .countdown {
+    font-size: clamp(96px, 21vw, 230px) !important;
+  }
+
+  .study-mode .floating-stack {
+    right: max(10px, env(safe-area-inset-right)) !important;
+    bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    width: min(34vw, 300px) !important;
+    max-width: min(34vw, 300px) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .break-plan-row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .break-select,
+  .break-activity-select {
+    grid-column: 2;
+  }
+}
+
 @media (orientation: landscape) {
   .session-kicker {
     margin-right: 0 !important;

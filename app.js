@@ -265,7 +265,7 @@ function customization() {
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Sound</h2><p class="eyebrow">Soft chime when a study block completes</p></div><button class="tiny-btn" data-action="test-chime">Test chime</button></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 5.6.2</p>
+    <p class="app-version">Focus app version 6.0.1</p>
   `;
 }
 
@@ -300,10 +300,24 @@ function startFlow() {
     <div class="sheet-actions"><button class="primary-btn" data-action="load-plan">Load today's plan</button></div></section></div>`;
   const total = flow.plan.reduce((sum, s) => sum + Number(s.hours), 0);
   const valid = Math.abs(total - mode.hours) < 0.01;
+  if (flow.step === "breaks") return breakReviewFlow(mode);
   return `
     <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · ${fmtHours(mode.hours)}</p><h2>Today's plan</h2></div><span class="total-pill ${valid ? "good" : "bad"}">${fmtHours(total)}</span></div>
     <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" draggable="${flow.editing}" data-index="${i}"><div class="drag">${flow.editing ? "=" : "↓"}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtPlanDuration(s.hours)}</p></div>${flow.editing ? `<div class="subject-stepper"><button data-nudge="${i}:-30">-</button><button data-nudge="${i}:30">+</button></div>` : ""}</article>`).join("")}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="confirm-plan" ${valid ? "" : "disabled"}>Confirm and lock</button><button class="soft-btn" data-action="toggle-edit">${flow.editing ? "Done editing" : "Edit"}</button><button class="tiny-btn" data-action="close-flow">Cancel</button></div></section></div>`;
+}
+
+function breakReviewFlow(mode) {
+  return `
+    <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · break structure</p><h2>Review breaks</h2></div><button class="icon-btn" data-action="close-flow">x</button></div>
+    <div class="break-plan-list">${flow.timeline.map((item, index) => item.type === "study" ? `
+      <article class="break-plan-row is-study"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m study</p></div></article>` : `
+      <article class="break-plan-row"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m break</p></div><select class="field break-select" data-break-kind="${index}"><option value="micro" ${item.type === "micro" ? "selected" : ""}>Short</option><option value="medium" ${item.type === "medium" ? "selected" : ""}>Medium</option><option value="none">None</option></select><select class="field break-activity-select" data-break-choice="${index}">${breakChoices(item.type).map((choice) => `<option ${choice === item.subject ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></article>`).join("")}</div>
+    <div class="sheet-actions"><button class="primary-btn" data-action="start-reviewed-session">Start session</button><button class="soft-btn" data-action="back-to-plan">Back to plan</button></div></section></div>`;
+}
+
+function breakChoices(type) {
+  return (type === "medium" ? state.breaks.long.activities : state.breaks.short.activities).filter(Boolean);
 }
 
 function buildTimeline(plan) {
@@ -339,7 +353,7 @@ function pickActivity(list, previous) {
 
 async function startLive() {
   flow.plan = flow.plan.map((s) => ({ ...s, id: s.id || uid() }));
-  const timeline = buildTimeline(flow.plan);
+  const timeline = flow.timeline || buildTimeline(flow.plan);
   live = {
     id: uid(), timeline, index: 0, remaining: timeline[0].minutes * 60, paused: false,
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
@@ -607,6 +621,22 @@ function bindEvents() {
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
   document.querySelectorAll("[data-record-field]").forEach((input) => input.addEventListener("input", () => updateModalDraft(input)));
+  document.querySelectorAll("[data-break-kind]").forEach((input) => input.addEventListener("change", () => {
+    const index = Number(input.dataset.breakKind);
+    if (input.value === "none") flow.timeline.splice(index, 1);
+    else {
+      const choices = breakChoices(input.value);
+      const subject = choices[0] || "Quiet reset";
+      flow.timeline[index] = { ...flow.timeline[index], type: input.value, minutes: input.value === "micro" ? state.breaks.short.minutes : state.breaks.long.minutes, subject, emoji: recoveryEmoji(subject) };
+    }
+    render();
+  }));
+  document.querySelectorAll("[data-break-choice]").forEach((input) => input.addEventListener("change", () => {
+    const index = Number(input.dataset.breakChoice);
+    flow.timeline[index].subject = input.value;
+    flow.timeline[index].emoji = recoveryEmoji(input.value);
+    render();
+  }));
   setupDrag();
 }
 
@@ -627,7 +657,9 @@ function handleAction(event) {
   if (action === "close-flow") { flow = null; render(); }
   if (action === "load-plan") { flow.step = "plan"; render(); }
   if (action === "toggle-edit") { flow.editing = !flow.editing; render(); }
-  if (action === "confirm-plan") startLive();
+  if (action === "confirm-plan") { flow.timeline = buildTimeline(flow.plan); flow.step = "breaks"; render(); }
+  if (action === "back-to-plan") { flow.step = "plan"; render(); }
+  if (action === "start-reviewed-session") startLive();
   if (action === "test-chime") playCompletionChime();
   if (action === "pause-live") togglePause();
   if (action === "request-skip-break") { live.skipStep = "confirm"; renderLive(); }
@@ -688,7 +720,7 @@ function setupUpcomingRail() {
   const wakeRail = () => {
     rail.classList.add("is-active");
     clearTimeout(upcomingRailTimer);
-    upcomingRailTimer = setTimeout(() => rail.classList.remove("is-active"), 1800);
+    upcomingRailTimer = setTimeout(() => rail.classList.remove("is-active"), 3000);
   };
   rail.addEventListener("pointerdown", wakeRail);
   rail.addEventListener("pointermove", wakeRail);
