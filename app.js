@@ -1,4 +1,4 @@
-﻿const COUNTDOWN_START = new Date("2026-07-09T00:00:00");
+const COUNTDOWN_START = new Date("2026-07-09T00:00:00");
 const STARTING_DAYS = 136;
 const STORAGE_KEY = "focus.study.os.v5";
 
@@ -74,9 +74,9 @@ const defaults = {
     { id: "monk", name: "Monk Mode", hours: 10, note: "A long quiet day" }
   ],
   subjects: [
-    { id: "varc", name: "VARC", hours: 2, color: "#a7d8ff", emoji: "📖" },
-    { id: "dilr", name: "DILR", hours: 3, color: "#b8efd4", emoji: "🧩" },
-    { id: "quant", name: "QUANT", hours: 3, color: "#d6c4ff", emoji: "∑" }
+    { id: "varc", name: "VARC", hours: 2, color: "#a7d8ff", emoji: "??" },
+    { id: "dilr", name: "DILR", hours: 3, color: "#b8efd4", emoji: "??" },
+    { id: "quant", name: "QUANT", hours: 3, color: "#d6c4ff", emoji: "?" }
   ],
   recovery: {
     micro: ["Water", "Stretch", "Balcony Walk"],
@@ -84,8 +84,8 @@ const defaults = {
     enabled: ["Water", "Stretch", "Balcony Walk", "Meditation", "Breathing Exercise", "Mindful Scribbling"]
   },
   breaks: {
-    short: { minutes: 5, everyMinutes: 50, activities: ["Drink water", "Stand up", "Balcony walk"], emojis: { "Drink water": "💧", "Stand up": "🙆", "Balcony walk": "🌿" } },
-    long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"], emojis: { "Meditation": "🧘", "Breathing exercise": "◌", "Balcony walk": "🌿", "Mindful scribbling": "✎" } }
+    short: { minutes: 5, everyMinutes: 50, activities: ["Drink water", "Stand up", "Balcony walk"], emojis: { "Drink water": "??", "Stand up": "??", "Balcony walk": "??" } },
+    long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"], emojis: { "Meditation": "??", "Breathing exercise": "?", "Balcony walk": "??", "Mindful scribbling": "?" } }
   },
   theme: "focus",
   sound: "steady"
@@ -269,7 +269,7 @@ function customization() {
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 6.0.1</p>
+    <p class="app-version">Focus app version 7.0.3</p>
   `;
 }
 
@@ -309,28 +309,41 @@ function startFlow() {
   const mode = state.modes.find((m) => m.id === flow.selectedMode);
   if (flow.step === "mode") return `
     <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">Begin gently</p><h2>Choose today</h2></div><button class="icon-btn" data-action="close-flow">x</button></div>
-    <div class="mode-grid">${state.modes.map((m) => `<button class="mode-card ${m.id === flow.selectedMode ? "active" : ""}" data-select-mode="${m.id}"><strong>${m.name}</strong><span>${fmtHours(m.hours)} · ${m.note}</span></button>`).join("")}</div>
+    <div class="mode-grid">${state.modes.map((m) => `<button class="mode-card ${m.id === flow.selectedMode ? "active" : ""}" data-select-mode="${m.id}"><strong>${m.name}</strong><span>${fmtHours(m.hours)} � ${m.note}</span></button>`).join("")}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="load-plan">Load today's plan</button></div></section></div>`;
   const total = flow.plan.reduce((sum, s) => sum + Number(s.hours), 0);
   const valid = Math.abs(total - mode.hours) < 0.01;
   if (flow.step === "breaks") return breakReviewFlow(mode);
   return `
-    <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · ${fmtHours(mode.hours)}</p><h2>Today's plan</h2></div><span class="total-pill ${valid ? "good" : "bad"}">${fmtHours(total)}</span></div>
-    <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" draggable="${flow.editing}" data-index="${i}"><div class="drag">${flow.editing ? "=" : "↓"}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtPlanDuration(s.hours)}</p></div>${flow.editing ? `<div class="subject-stepper"><button data-nudge="${i}:-30">-</button><button data-nudge="${i}:30">+</button></div>` : ""}</article>`).join("")}</div>
+    <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} � ${fmtHours(mode.hours)}</p><h2>Today's plan</h2></div><span class="total-pill ${valid ? "good" : "bad"}">${fmtHours(total)}</span></div>
+    <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" draggable="${flow.editing}" data-index="${i}"><div class="drag">${flow.editing ? "=" : "?"}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtPlanDuration(s.hours)}</p></div>${flow.editing ? `<div class="subject-stepper"><button data-nudge="${i}:-30">-</button><button data-nudge="${i}:30">+</button></div>` : ""}</article>`).join("")}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="confirm-plan" ${valid ? "" : "disabled"}>Confirm and lock</button><button class="soft-btn" data-action="toggle-edit">${flow.editing ? "Done editing" : "Edit"}</button><button class="tiny-btn" data-action="close-flow">Cancel</button></div></section></div>`;
 }
 
 function breakReviewFlow(mode) {
   return `
-    <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · break structure</p><h2>Review breaks</h2></div><button class="icon-btn" data-action="close-flow">x</button></div>
-    <div class="break-plan-list">${flow.timeline.map((item, index) => item.type === "study" ? `
-      <article class="break-plan-row is-study"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m study</p></div></article>` : `
-      <article class="break-plan-row"><span>${item.emoji || "•"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m break</p></div><select class="field break-select" data-break-kind="${index}"><option value="micro" ${item.type === "micro" ? "selected" : ""}>Short</option><option value="medium" ${item.type === "medium" ? "selected" : ""}>Medium</option><option value="none">Remove</option>${canMergeAround(index) ? `<option value="merge">Remove + merge</option>` : ""}</select><select class="field break-activity-select" data-break-choice="${index}">${breakChoices(item.type).map((choice) => `<option ${choice === item.subject ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></article>`).join("")}</div>
+    <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} � break structure</p><h2>Review breaks</h2></div><button class="icon-btn" data-action="close-flow">x</button></div>
+    <div class="break-plan-list">${breakPlanRows()}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="start-reviewed-session">Start session</button><button class="soft-btn" data-action="back-to-plan">Back to plan</button></div></section></div>`;
+}
+
+function breakPlanRows() {
+  return flow.timeline.map((item, index) => item.type === "study" ? `
+      <article class="break-plan-row is-study"><span>${item.emoji || "�"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m study</p></div></article>` : `
+      <article class="break-plan-row"><span>${item.emoji || "�"}</span><div><strong>${item.subject}</strong><p class="eyebrow">${item.minutes}m break</p></div><select class="field break-select" data-break-kind="${index}"><option value="micro" ${item.type === "micro" ? "selected" : ""}>Short</option><option value="medium" ${item.type === "medium" ? "selected" : ""}>Medium</option><option value="none">Remove</option>${canMergeAround(index) ? `<option value="merge">Remove + merge</option>` : ""}</select><select class="field break-activity-select" data-break-choice="${index}">${breakChoices(item.type).map((choice) => `<option ${choice === item.subject ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></article>`).join("");
 }
 
 function breakChoices(type) {
   return (type === "medium" ? state.breaks.long.activities : state.breaks.short.activities).filter(Boolean);
+}
+function refreshBreakReviewRows() {
+  const list = document.querySelector(".break-plan-list");
+  const sheet = document.querySelector(".sheet");
+  const scrollTop = sheet?.scrollTop || 0;
+  if (!list) return render();
+  list.innerHTML = breakPlanRows();
+  bindBreakReviewEvents();
+  if (sheet) sheet.scrollTop = scrollTop;
 }
 function breakEmoji(type, activity) {
   return (type === "medium" ? state.breaks.long.emojis : state.breaks.short.emojis)?.[activity] || recoveryEmoji(activity);
@@ -356,7 +369,7 @@ function buildTimeline(plan) {
     let remainingStudyMinutes = Math.round(subject.hours * 60);
     while (remainingStudyMinutes > 0) {
       const minutes = Math.min(maxStudyChunk, remainingStudyMinutes);
-      timeline.push({ type: "study", subject: subject.name, minutes, color: subject.color, emoji: subject.emoji || "•" });
+      timeline.push({ type: "study", subject: subject.name, minutes, color: subject.color, emoji: subject.emoji || "�" });
       remainingStudyMinutes -= minutes;
       if (remainingStudyMinutes > 0 && shortBreak.activities.length) {
         const activity = pickActivity(shortBreak.activities, lastRecovery);
@@ -431,7 +444,7 @@ function renderLive() {
         <div class="commitment-clock"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div>
         <button class="end-session-btn" data-action="request-end-session">End</button>
         <div class="standby-content">
-          <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "•"}</div></div>
+          <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "�"}</div></div>
           <div class="subject">${item.subject}</div>
           <div class="countdown" data-countdown>${fmtClock(live.remaining)}</div>
           <div class="live-actions">
@@ -440,7 +453,7 @@ function renderLive() {
           </div>
         </div>
       </section>
-      <aside class="floating-stack">${upcoming.map((x) => `<div class="stack-card next-${x.type}" style="--mini-color:${x.color}"><span>${x.emoji || "•"}</span><strong>${x.subject}</strong><small><b>${x.minutes}m</b> ${x.type === "study" ? "study" : "break"}</small></div>`).join("")}</aside>
+      <aside class="floating-stack">${upcoming.map((x) => `<div class="stack-card next-${x.type}" style="--mini-color:${x.color}"><span>${x.emoji || "�"}</span><strong>${x.subject}</strong><small><b>${x.minutes}m</b> ${x.type === "study" ? "study" : "break"}</small></div>`).join("")}</aside>
       ${live.endStep ? endSessionDialog() : ""}
       ${live.skipStep ? skipBreakDialog() : ""}
     </main>
@@ -452,7 +465,7 @@ function renderLive() {
 
 function skipBreakDialog() {
   return `
-    <div class="overlay end-overlay"><section class="sheet confirm-sheet"><p class="eyebrow">Tiny check-in</p><h2>Skip this break? 🌿</h2><p class="copy">Your brain might need these few minutes. If you still feel clear and ready, you can return to study now.</p><div class="sheet-actions"><button class="soft-btn" data-action="keep-break">Take the break</button><button class="tiny-btn skip-confirm" data-action="confirm-skip-break">Yes, skip break</button></div></section></div>`;
+    <div class="overlay end-overlay"><section class="sheet confirm-sheet"><p class="eyebrow">Tiny check-in</p><h2>Skip this break? ??</h2><p class="copy">Your brain might need these few minutes. If you still feel clear and ready, you can return to study now.</p><div class="sheet-actions"><button class="soft-btn" data-action="keep-break">Take the break</button><button class="tiny-btn skip-confirm" data-action="confirm-skip-break">Yes, skip break</button></div></section></div>`;
 }
 
 function endSessionDialog() {
@@ -465,14 +478,14 @@ function endSessionDialog() {
 function recoveryLabel(type) { return type === "micro" ? "Micro recovery" : "Medium recovery"; }
 function recoveryEmoji(activity) {
   const key = activity.toLowerCase();
-  if (key.includes("water")) return "💧";
-  if (key.includes("stand") || key.includes("stretch")) return "🙆";
-  if (key.includes("balcony") || key.includes("walk")) return "🌿";
-  if (key.includes("breath")) return "◌";
-  if (key.includes("meditat")) return "🧘";
-  if (key.includes("scribbl") || key.includes("write")) return "✎";
-  if (key.includes("coffee")) return "☕";
-  return "•";
+  if (key.includes("water")) return "??";
+  if (key.includes("stand") || key.includes("stretch")) return "??";
+  if (key.includes("balcony") || key.includes("walk")) return "??";
+  if (key.includes("breath")) return "?";
+  if (key.includes("meditat")) return "??";
+  if (key.includes("scribbl") || key.includes("write")) return "?";
+  if (key.includes("coffee")) return "?";
+  return "�";
 }
 function tick() {
   if (!live) return;
@@ -685,14 +698,14 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-break-emoji]").forEach((input) => input.addEventListener("change", () => {
     const [type, index] = input.dataset.breakEmoji.split(":");
-    state.breaks[type].emojis[state.breaks[type].activities[Number(index)]] = input.value.trim() || "•";
+    state.breaks[type].emojis[state.breaks[type].activities[Number(index)]] = input.value.trim() || "�";
     saveState();
     render();
   }));
   document.querySelectorAll("[data-add-break]").forEach((btn) => btn.addEventListener("click", () => {
     const type = btn.dataset.addBreak;
     state.breaks[type].activities.push(type === "short" ? "Drink water" : "Breathing exercise");
-    state.breaks[type].emojis[state.breaks[type].activities.at(-1)] = type === "short" ? "💧" : "◌";
+    state.breaks[type].emojis[state.breaks[type].activities.at(-1)] = type === "short" ? "??" : "?";
     saveState();
     render();
   }));
@@ -709,6 +722,11 @@ function bindEvents() {
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
   document.querySelectorAll("[data-record-field]").forEach((input) => input.addEventListener("input", () => updateModalDraft(input)));
+  bindBreakReviewEvents();
+  setupDrag();
+}
+
+function bindBreakReviewEvents() {
   document.querySelectorAll("[data-break-kind]").forEach((input) => input.addEventListener("change", () => {
     const index = Number(input.dataset.breakKind);
     if (input.value === "merge") mergeAroundBreak(index);
@@ -718,15 +736,18 @@ function bindEvents() {
       const subject = choices[0] || "Quiet reset";
       flow.timeline[index] = { ...flow.timeline[index], type: input.value, minutes: input.value === "micro" ? state.breaks.short.minutes : state.breaks.long.minutes, subject, emoji: breakEmoji(input.value, subject) };
     }
-    render();
+    refreshBreakReviewRows();
   }));
   document.querySelectorAll("[data-break-choice]").forEach((input) => input.addEventListener("change", () => {
     const index = Number(input.dataset.breakChoice);
     flow.timeline[index].subject = input.value;
     flow.timeline[index].emoji = breakEmoji(flow.timeline[index].type, input.value);
-    render();
+    const row = input.closest(".break-plan-row");
+    if (row) {
+      row.querySelector("span").textContent = flow.timeline[index].emoji;
+      row.querySelector("strong").textContent = input.value;
+    }
   }));
-  setupDrag();
 }
 
 function updateModalDraft(input) {
