@@ -115,6 +115,27 @@ h3 { font-size: 17px; margin-bottom: 8px; }
 }
 .subject-stepper { display: flex; align-items: center; gap: 8px; }
 .subject-stepper button { width: 34px; min-height: 34px; }
+.subject-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.subject-reorder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subject-reorder button {
+  width: 34px;
+  min-height: 34px;
+  border-radius: 999px;
+  background: rgba(255,248,234,.08);
+  color: var(--text);
+  font-weight: 900;
+}
+.subject-reorder button:disabled {
+  opacity: .32;
+}
 .total-pill { border-radius: 999px; padding: 10px 13px; background: rgba(255,248,234,.08); color: var(--muted); font-weight: 800; }
 .total-pill.good { color: var(--mint); }
 .total-pill.bad { color: var(--rose); }

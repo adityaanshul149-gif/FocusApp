@@ -280,7 +280,7 @@ function customization() {
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 7.0.5</p>
+    <p class="app-version">Focus app version 7.0.6</p>
   `;
 }
 
@@ -327,7 +327,7 @@ function startFlow() {
   if (flow.step === "breaks") return breakReviewFlow(mode);
   return `
     <div class="overlay"><section class="sheet"><div class="panel-head"><div><p class="eyebrow">${mode.name} · ${fmtHours(mode.hours)}</p><h2>Today's plan</h2></div><span class="total-pill ${valid ? "good" : "bad"}">${fmtHours(total)}</span></div>
-    <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" draggable="${flow.editing}" data-index="${i}"><div class="drag subject-icon">${s.emoji || "•"}${flow.editing ? `<small>=</small>` : ""}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtPlanDuration(s.hours)}</p></div>${flow.editing ? `<div class="subject-stepper"><button data-nudge="${i}:-30">-</button><button data-nudge="${i}:30">+</button></div>` : ""}</article>`).join("")}</div>
+    <div class="plan-list">${flow.plan.map((s, i) => `<article class="subject-card" data-index="${i}"><div class="drag subject-icon">${s.emoji || "•"}</div><div><strong>${s.name}</strong><p class="eyebrow">${fmtPlanDuration(s.hours)}</p></div>${flow.editing ? `<div class="subject-controls"><div class="subject-stepper"><button data-nudge="${i}:-30">-</button><button data-nudge="${i}:30">+</button></div><div class="subject-reorder"><button data-move-subject="${i}:-1" ${i === 0 ? "disabled" : ""}>↑</button><button data-move-subject="${i}:1" ${i === flow.plan.length - 1 ? "disabled" : ""}>↓</button></div></div>` : ""}</article>`).join("")}</div>
     <div class="sheet-actions"><button class="primary-btn" data-action="confirm-plan" ${valid ? "" : "disabled"}>Confirm and lock</button><button class="soft-btn" data-action="toggle-edit">${flow.editing ? "Done editing" : "Edit"}</button><button class="tiny-btn" data-action="close-flow">Cancel</button></div></section></div>`;
 }
 
@@ -668,6 +668,14 @@ function bindEvents() {
   document.querySelectorAll("[data-nudge]").forEach((btn) => btn.addEventListener("click", () => {
     const [index, delta] = btn.dataset.nudge.split(":").map(Number);
     flow.plan[index].hours = clamp(Math.round((flow.plan[index].hours + delta / 60) * 2) / 2, 0.5, 10);
+    render();
+  }));
+  document.querySelectorAll("[data-move-subject]").forEach((btn) => btn.addEventListener("click", () => {
+    const [index, delta] = btn.dataset.moveSubject.split(":").map(Number);
+    const to = index + delta;
+    if (to < 0 || to >= flow.plan.length) return;
+    const [moved] = flow.plan.splice(index, 1);
+    flow.plan.splice(to, 0, moved);
     render();
   }));
   document.querySelectorAll("[data-mode-hours]").forEach((input) => input.addEventListener("change", () => {
