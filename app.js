@@ -290,12 +290,13 @@ function historyTable(rows) {
   return `
     <div class="history-actions"><button class="history-delete" data-action="clear-history">Clear</button></div>
     <table class="history-table">
-      <thead><tr><th>Date</th><th>Total</th><th>Focus</th><th>Pomodoros</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Total</th><th>Focus</th><th>Unplanned</th><th>Pomodoros</th><th>Status</th><th>Reason</th><th></th></tr></thead>
       <tbody>${rows.map((record) => `
         <tr>
           <td>${escapeHtml(record.date)}</td>
           <td>${fmtDuration(record.totalSeconds || 0)}</td>
           <td>${fmtDuration(record.focusedSeconds || 0)}</td>
+          <td>${fmtDuration(record.unplannedBreakSeconds || 0)}</td>
           <td>${record.completedPomodoros || 0}</td>
           <td><span class="status-pill ${record.status === "Completed" ? "done" : "early"}">${record.status}</span></td>
           <td class="reason-cell">${escapeHtml(record.reason || "-")}</td>
@@ -316,8 +317,9 @@ function customization() {
       ${breakEditor("long", "Long breaks", "After each subject", state.breaks.long)}
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 8.0</p>
+    <p class="app-version">Focus app version 10.01</p>
   `;
 }
 
@@ -475,7 +477,7 @@ function beginLive(timeline) {
   live = {
     id: uid(), timeline, index: 0, remaining: timeline[0].minutes * 60, paused: false,
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
-    focusedMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null
+    focusedMs: 0, unplannedBreakMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null, showPrediction: false, adjustStep: false
   };
   saveActiveSession();
   render();
@@ -487,6 +489,7 @@ function renderLive() {
   const duration = item.minutes * 60;
   const itemLeft = clamp((live.remaining / duration) * 100, 0, 100);
   const isRecovery = item.type !== "study";
+  const predictedEnd = new Date(Date.now() + remainingTimelineSeconds() * 1000);
   const upcoming = live.timeline.slice(live.index + 1);
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
   app.innerHTML = `
@@ -494,16 +497,13 @@ function renderLive() {
       <section class="standby-card ${isRecovery ? "recovery-card" : ""}">
         <div class="empty-layer"></div>
         <div class="card-grain"></div>
-        <div class="commitment-clock"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div>
+        <div class="time-cluster ${live.paused ? "is-break-active" : ""}"><div class="info-stack"><div class="commitment-clock priority-card" data-action="toggle-prediction"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div><div class="prediction-chip ${live.showPrediction ? "is-visible" : ""}" data-action="toggle-prediction"><p>Session Ends</p><b>${formatPredictedEnd(predictedEnd)}</b></div></div><div class="unplanned-card priority-card"><span>Unplanned Break</span><b>${fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000))}</b></div></div>
         <button class="end-session-btn" data-action="request-end-session">End</button>
         <div class="standby-content">
           <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "•"}</div></div>
-          <div class="subject">${item.subject}</div>
-          <div class="countdown" data-countdown>${fmtClock(live.remaining)}</div>
-          <div class="live-actions">
-            <button class="pause-btn ${live.paused ? "is-paused" : ""}" data-action="pause-live">${live.paused ? "Resume" : "Pause"}</button>
-            ${isRecovery ? `<button class="skip-break-btn" data-action="request-skip-break">Skip</button>` : ""}
-          </div>
+          <div class="subject" data-subject-adjust>${item.subject}</div>
+          <div class="timer-wrap"><div class="countdown" data-countdown>${fmtClock(live.remaining)}</div>${live.adjustStep ? adjustPopup() : ""}</div>
+          <div class="live-actions">${isRecovery ? `<button class="skip-break-btn" data-action="request-skip-break">Skip Break</button>` : `<button class="pause-btn ${live.paused ? "is-paused" : ""}" data-action="pause-live">${live.paused ? "Resume" : "Unplanned Break"}</button>`}</div>
         </div>
       </section>
       <aside class="floating-stack">${upcoming.map((x) => `<div class="stack-card next-${x.type}" style="--mini-color:${x.color}"><span>${x.emoji || "•"}</span><strong>${x.subject}</strong><small><b>${x.minutes}m</b> ${x.type === "study" ? "study" : "break"}</small></div>`).join("")}</aside>
@@ -516,6 +516,14 @@ function renderLive() {
   ticker = setInterval(tick, 1000);
 }
 
+function adjustPopup() { return `<div class="adjust-popup"><button data-action="adjust-current" data-delta="-5">-5 min</button><button data-action="adjust-current" data-delta="5">+5 min</button></div>`; }
+function remainingTimelineSeconds() {
+  if (!live) return 0;
+  return live.timeline.slice(live.index + 1).reduce((sum, item) => sum + item.minutes * 60, Math.max(0, live.remaining));
+}
+function formatPredictedEnd(date) {
+  return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}<br>${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true })}`;
+}
 function skipBreakDialog() {
   return `
     <div class="overlay end-overlay"><section class="sheet confirm-sheet"><p class="eyebrow">Tiny check-in</p><h2>Skip this break? \uD83C\uDF3F</h2><p class="copy">Your brain might need these few minutes. If you still feel clear and ready, you can return to study now.</p><div class="sheet-actions"><button class="soft-btn" data-action="keep-break">Take the break</button><button class="tiny-btn skip-confirm" data-action="confirm-skip-break">Yes, skip break</button></div></section></div>`;
@@ -547,6 +555,7 @@ function recoveryEmoji(activity) {
   live.lastTickAt = now;
   live.elapsedMs = (live.elapsedMs || 0) + deltaMs;
   updateLiveDisplay();
+  if (live.paused) live.unplannedBreakMs = (live.unplannedBreakMs || 0) + deltaMs;
   if (!live.paused && delta) {
     const item = live.timeline[live.index];
     if (item.type === "study") live.focusedMs = (live.focusedMs || 0) + deltaMs;
@@ -555,8 +564,6 @@ function recoveryEmoji(activity) {
   saveActiveSession();
   if (!live.paused && live.remaining <= 0) {
     completeCurrentBlock();
-    if (!live) return;
-    renderLive();
     return;
   }
   updateLiveDisplay();
@@ -567,6 +574,8 @@ function updateLiveDisplay() {
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
   const commitment = document.querySelector("[data-commitment-time]");
   if (commitment) commitment.textContent = fmtDuration(totalCommitmentSeconds);
+  const unplanned = document.querySelector(".unplanned-card b");
+  if (unplanned) unplanned.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
   const countdown = document.querySelector("[data-countdown]");
   if (countdown) countdown.textContent = fmtClock(live.remaining);
   const item = live.timeline[live.index];
@@ -580,13 +589,39 @@ function updateLiveDisplay() {
 }
 
 function completeCurrentBlock() {
+  if (live.celebrating) return;
   const item = live.timeline[live.index];
   if (item.type === "study") live.completedPomodoros += 1;
   playMainNotification();
+  if (item.type === "study") return showCompletionCelebration(item);
+  advanceToNextBlock();
+}
+
+function advanceToNextBlock() {
+  live.celebrating = false;
   live.index += 1;
   if (live.index >= live.timeline.length) return finishSession("Completed");
   live.remaining = live.timeline[live.index].minutes * 60;
+  live.lastTickAt = performance.now();
   saveActiveSession();
+  renderLive();
+}
+
+function showCompletionCelebration(item) {
+  live.celebrating = true;
+  const isBlockDone = !live.timeline.slice(live.index + 1).some((x) => x.type === "study" && x.subject === item.subject);
+  const title = isBlockDone ? `🏆 ${item.subject} Completed!` : ["Good Job!", "Well Done!", "Nice Work!"][Math.floor(Math.random() * 3)];
+  const quote = randomQuote();
+  const overlay = document.createElement("div");
+  overlay.className = `celebration ${isBlockDone ? "big" : "small"}`;
+  overlay.innerHTML = `<div class="celebration-card"><div class="burst">${isBlockDone ? "🏆" : "✨"}</div><h2>${title}</h2>${isBlockDone ? `<p>${quote}</p>` : ""}<div class="particles"><i></i><i></i><i></i><i></i><i></i></div></div>`;
+  document.querySelector(".study-mode")?.appendChild(overlay);
+  setTimeout(advanceToNextBlock, isBlockDone ? 7000 : 3000);
+}
+
+function randomQuote() {
+  const quotes = ["🔥 Keep your momentum going.", "📚 Small progress every day becomes massive success.", "💪 One session closer to your goal.", "🚀 Consistency beats intensity.", "🎯 Focus now. Celebrate later.", "🏆 Success is built one focused session at a time."];
+  return quotes[Math.floor(Math.random() * quotes.length)];
 }
 
 function finishSession(status = "Completed", reason = "") {
@@ -601,6 +636,7 @@ function finishSession(status = "Completed", reason = "") {
     createdAt: new Date().toISOString(),
     totalSeconds,
     focusedSeconds,
+    unplannedBreakSeconds: Math.floor((live.unplannedBreakMs || 0) / 1000),
     completedPomodoros,
     status,
     reason: reason.trim()
@@ -804,7 +840,9 @@ function bindEvents() {
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
   document.querySelectorAll("[data-record-field]").forEach((input) => input.addEventListener("input", () => updateModalDraft(input)));
+  document.querySelectorAll("[data-subject-adjust]").forEach((el) => el.addEventListener("click", (event) => { event.stopPropagation(); if (live?.timeline[live.index]?.type === "study") { live.adjustStep = !live.adjustStep; renderLive(); } }));
   bindBreakReviewEvents();
+  document.querySelectorAll("[data-import-profile]").forEach((input) => input.addEventListener("change", importProfile));
   setupDrag();
 }
 
@@ -848,6 +886,26 @@ function bindBreakReviewEvents() {
   }));
 }
 
+function exportProfile() {
+  const data = { schema: "focusapp.profile", version: "10.01", exportedAt: new Date().toISOString(), state, activeSession: live || null };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `focusapp-profile-${todayKey()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+async function importProfile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!confirm("Import this profile and replace the current app data on this device?")) return;
+  const data = JSON.parse(await file.text());
+  state = normalizeState(data.state || data);
+  live = data.activeSession ? reconcileActiveSession(data.activeSession) : null;
+  saveState();
+  saveActiveSession();
+  render();
+}
 function updateModalDraft(input) {
   const record = modal.draft;
   if (!record) return;
@@ -870,6 +928,9 @@ function handleAction(event) {
   if (action === "start-reviewed-session") startLive();
   if (action === "test-chime") playMainNotification();
   if (action === "pause-live") togglePause();
+  if (action === "toggle-prediction") { live.showPrediction = !live.showPrediction; renderLive(); }
+  if (action === "adjust-current") { live.remaining = Math.max(60, live.remaining + Number(event.currentTarget.dataset.delta) * 60); live.timeline[live.index].minutes = Math.max(1, Math.ceil(live.remaining / 60)); live.adjustStep = true; saveActiveSession(); renderLive(); }
+  if (action === "export-profile") exportProfile();
   if (action === "request-skip-break") { live.skipStep = "confirm"; renderLive(); }
   if (action === "keep-break") { live.skipStep = null; live.lastTickAt = performance.now(); renderLive(); }
   if (action === "confirm-skip-break") skipCurrentBreak();
