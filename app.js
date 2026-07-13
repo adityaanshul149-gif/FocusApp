@@ -85,11 +85,13 @@ const defaults = {
     enabled: ["Water", "Stretch", "Balcony Walk", "Meditation", "Breathing Exercise", "Mindful Scribbling"]
   },
   breaks: {
-    short: { minutes: 5, everyMinutes: 50, activities: ["Drink water", "Stand up", "Balcony walk"], emojis: { "Drink water": "\uD83D\uDCA7", "Stand up": "\uD83E\uDD38", "Balcony walk": "\uD83C\uDF3F" } },
-    long: { minutes: 15, activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"], emojis: { "Meditation": "\uD83E\uDDD8", "Breathing exercise": "\u25CC", "Balcony walk": "\uD83C\uDF3F", "Mindful scribbling": "\u270E" } }
+    short: { minutes: 5, everyMinutes: 50, color: "#c7f0dd", activities: ["Drink water", "Stand up", "Balcony walk"], emojis: { "Drink water": "\uD83D\uDCA7", "Stand up": "\uD83E\uDD38", "Balcony walk": "\uD83C\uDF3F" } },
+    long: { minutes: 15, color: "#ffe3ad", activities: ["Meditation", "Breathing exercise", "Balcony walk", "Mindful scribbling"], emojis: { "Meditation": "\uD83E\uDDD8", "Breathing exercise": "\u25CC", "Balcony walk": "\uD83C\uDF3F", "Mindful scribbling": "\u270E" } }
   },
   theme: "focus",
-  sound: "steady"
+  sound: "steady",
+  paletteTheme: "candy",
+  colorAssignments: { varc: 0, dilr: 1, quant: 2, short: 3, long: 4 }
 };
 
 let state = normalizeState(loadState());
@@ -107,7 +109,7 @@ function normalizeState(saved) {
   const subjectDefaults = new Map(defaults.subjects.map((subject) => [subject.id, subject]));
   saved.subjects = (saved.subjects || defaults.subjects).map((subject) => {
     const preset = subjectDefaults.get(subject.id) || {};
-    return { ...subject, color: preset.color || subject.color, emoji: cleanEmoji(subject.emoji, preset.emoji) };
+    return { ...preset, ...subject, color: subject.color || preset.color || "#a7d8ff", emoji: cleanEmoji(subject.emoji, preset.emoji) };
   });
   saved.modes = saved.modes || defaults.modes;
   saved.recovery = { ...defaults.recovery, ...(saved.recovery || {}) };
@@ -116,6 +118,10 @@ function normalizeState(saved) {
   saved.history = Array.isArray(saved.history) ? saved.history : [];
   saved.theme = appThemes[saved.theme] ? saved.theme : "focus";
   saved.sound = saved.sound || defaults.sound;
+  delete saved.timerUI;
+  saved.paletteTheme = colorPalettes()[saved.paletteTheme] ? saved.paletteTheme : defaults.paletteTheme;
+  saved.colorAssignments = normalizeColorAssignments(saved.colorAssignments);
+  applySectionAssignments(saved);
   return saved;
 }
 
@@ -127,15 +133,93 @@ function normalizeBreaks(breaks) {
     short: {
       minutes: clamp(Number(source.short?.minutes || defaults.breaks.short.minutes), 1, 20),
       everyMinutes: normalizeStudyChunkMinutes(source.short?.everyMinutes),
+      color: source.short?.color || defaults.breaks.short.color,
       activities: shortActivities,
       emojis: cleanEmojiMap({ ...defaults.breaks.short.emojis, ...(source.short?.emojis || {}) }, defaults.breaks.short.emojis)
     },
     long: {
       minutes: clamp(Number(source.long?.minutes || defaults.breaks.long.minutes), 5, 45),
+      color: source.long?.color || defaults.breaks.long.color,
       activities: longActivities,
       emojis: cleanEmojiMap({ ...defaults.breaks.long.emojis, ...(source.long?.emojis || {}) }, defaults.breaks.long.emojis)
     }
   };
+}
+function colorPalettes() {
+  return {
+    neon: { name: "Neon Pop", colors: ["#390099", "#9E0059", "#FF0054", "#FF5400", "#FFBD00"] },
+    fiesta: { name: "Fiesta", colors: ["#F94144", "#F3722C", "#F8961E", "#43AA8B", "#277DA1"] },
+    academic: { name: "Academic", colors: ["#203744", "#15616D", "#FFECD1", "#FF7D00", "#78290F"] },
+    candy: { name: "Candy Pop", colors: ["#9B5DE5", "#F15BB5", "#FEE440", "#00BBF9", "#00F5D4"] },
+    modern: { name: "Modern Bright", colors: ["#EF476F", "#FFD166", "#06D6A0", "#118AB2", "#073B4C"] },
+    aurora: { name: "Aurora", colors: ["#072AC8", "#1E96FC", "#A2D6F9", "#FCF300", "#FFC600"] },
+    autumn: { name: "Autumn Fire", colors: ["#FF4E00", "#8EA604", "#F5BB00", "#EC9F05", "#BF3100"] },
+    pastel: { name: "Pastel Dream", colors: ["#D3FFB8", "#B6DAFC", "#F4D7F0", "#C9B6FF", "#FFFC98"] },
+    royal: { name: "Royal Neon", colors: ["#2D00F7", "#6A00F4", "#8900F2", "#A100F2", "#F20089"] },
+    coffee: { name: "Coffee House", colors: ["#26201C", "#49111C", "#F2F4F3", "#A9927D", "#5E503F"] },
+    productivity: { name: "Productivity", colors: ["#3C91E6", "#9FD356", "#5B5560", "#FAFFFD", "#FA824C"] },
+    focus: { name: "Focus", colors: ["#D00000", "#FFBA08", "#3F88C5", "#164967", "#136F63"] },
+    ocean: { name: "Ocean Breeze", colors: ["#247BA0", "#70C1B3", "#B2DBBF", "#F3FFBD", "#FF1654"] }
+  };
+}
+function actionPalettes() {
+  return {
+    neon: { play: "#00D1A7", pause: "#D6A84F", skip: "#7C8DB5", end: "#7A2848" },
+    fiesta: { play: "#2FBF71", pause: "#D7A94B", skip: "#6B8CA8", end: "#8F3A3D" },
+    academic: { play: "#2E9F85", pause: "#C89745", skip: "#607C8D", end: "#743737" },
+    candy: { play: "#20C997", pause: "#E5B94E", skip: "#8AA4C8", end: "#9B3D64" },
+    modern: { play: "#18B889", pause: "#D9A84A", skip: "#5E88A6", end: "#9A3B4F" },
+    aurora: { play: "#21BFA6", pause: "#D6B64C", skip: "#6F8FCC", end: "#7B365C" },
+    autumn: { play: "#4B9F72", pause: "#D4A246", skip: "#74889A", end: "#8E3828" },
+    pastel: { play: "#5BBF9B", pause: "#D2B75A", skip: "#8EA4BF", end: "#A45A72" },
+    royal: { play: "#00B894", pause: "#C9A24D", skip: "#7B83B7", end: "#8E2D61" },
+    coffee: { play: "#4F9B79", pause: "#B99A65", skip: "#7F8B93", end: "#7D3541" },
+    productivity: { play: "#1FAE7A", pause: "#C8A64B", skip: "#688CA8", end: "#9A4A3A" },
+    focus: { play: "#1FAE8A", pause: "#D3A83F", skip: "#6F8EAA", end: "#8A303A" },
+    ocean: { play: "#19A98C", pause: "#C8B85A", skip: "#668BA6", end: "#9A3651" }
+  };
+}
+function sectionTargets() {
+  const byId = Object.fromEntries(state.subjects.map((subject) => [subject.id, subject]));
+  return [
+    { id: "varc", label: "VARC", icon: byId.varc?.emoji || "\uD83D\uDCD6" },
+    { id: "dilr", label: "DILR", icon: byId.dilr?.emoji || "\uD83E\uDDE9" },
+    { id: "quant", label: "QUANT", icon: byId.quant?.emoji || "\u2211" },
+    { id: "short", label: "Short Break", icon: "\uD83D\uDCA7" },
+    { id: "long", label: "Long Break", icon: "\uD83E\uDDD8" }
+  ];
+}
+function normalizeColorAssignments(assignments = defaults.colorAssignments) {
+  const ids = ["varc", "dilr", "quant", "short", "long"];
+  const used = new Set();
+  const normalized = {};
+  ids.forEach((id, fallback) => {
+    let value = Number(assignments?.[id]);
+    if (!Number.isInteger(value) || value < 0 || value > 4 || used.has(value)) value = fallback;
+    while (used.has(value)) value = (value + 1) % 5;
+    used.add(value);
+    normalized[id] = value;
+  });
+  return normalized;
+}
+function applySectionAssignments(target = state) {
+  const palette = colorPalettes()[target.paletteTheme] || colorPalettes().candy;
+  (target.subjects || []).forEach((subject) => {
+    if (target.colorAssignments[subject.id] !== undefined) subject.color = palette.colors[target.colorAssignments[subject.id]];
+  });
+  if (target.breaks?.short) target.breaks.short.color = palette.colors[target.colorAssignments.short];
+  if (target.breaks?.long) target.breaks.long.color = palette.colors[target.colorAssignments.long];
+}
+function assignPaletteColor(colorIndex, sectionId) {
+  const assignments = normalizeColorAssignments(state.colorAssignments);
+  const currentColorIndex = assignments[sectionId];
+  const occupyingSection = Object.keys(assignments).find((key) => key !== sectionId && assignments[key] === colorIndex);
+  assignments[sectionId] = colorIndex;
+  if (occupyingSection) assignments[occupyingSection] = currentColorIndex;
+  state.colorAssignments = normalizeColorAssignments(assignments);
+  applySectionAssignments();
+  saveState();
+  render();
 }
 function cleanEmoji(value, fallback = "•") {
   return !value || value === "?" || value === "??" || value === "�" ? fallback : value;
@@ -240,6 +324,11 @@ function applyTheme() {
   root.style.setProperty("--timer-text", theme.timerText);
   root.style.setProperty("--pill", theme.pill);
   root.style.setProperty("--dialog", theme.dialog);
+  const actions = actionPalettes()[state.paletteTheme] || actionPalettes().candy;
+  root.style.setProperty("--action-play", actions.play);
+  root.style.setProperty("--action-pause", actions.pause);
+  root.style.setProperty("--action-skip", actions.skip);
+  root.style.setProperty("--action-end", actions.end);
 }
 
 function render() {
@@ -316,11 +405,59 @@ function customization() {
       ${breakEditor("short", "Short breaks", `Every ${state.breaks.short.everyMinutes}m of study`, state.breaks.short)}
       ${breakEditor("long", "Long breaks", "After each subject", state.breaks.long)}
     </section>
+    <section class="panel"><div class="panel-head"><div><h2>Section colors</h2><p class="eyebrow">Choose a curated palette and assign one color to each section.</p></div></div>${sectionColorEditor()}</section>
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 10.01</p>
+    <p class="app-version">Focus app version 10.08</p>
   `;
+}
+function colorName(color, index) {
+  const names = ["Primary", "Bright", "Warm", "Cool", "Deep"];
+  return names[index] || color;
+}
+function sectionColorEditor() {
+  const palettes = colorPalettes();
+  const palette = palettes[state.paletteTheme] || palettes.candy;
+  const targets = sectionTargets();
+  const assignedTo = (index) => targets.find((target) => state.colorAssignments[target.id] === index);
+  return `
+    <label class="palette-select"><span>Section Color Theme</span><select class="field wide-field" data-palette-theme>${Object.entries(palettes).map(([id, item]) => `<option value="${id}" ${state.paletteTheme === id ? "selected" : ""}>${item.name}</option>`).join("")}</select></label>
+    <div class="palette-board">${palette.colors.map((color, index) => {
+      const selected = assignedTo(index);
+      return `<article class="palette-card" style="--swatch:${color}">
+        <div class="palette-meta"><span class="palette-swatch"></span><div><strong>${colorName(color, index)}</strong><code>${color}</code></div></div>
+        <div class="assignment-pills">${targets.map((target) => `<button class="assign-pill ${selected?.id === target.id ? "active" : ""}" data-assign-color="${index}:${target.id}"><span>${target.icon}</span>${target.label}</button>`).join("")}</div>
+      </article>`;
+    }).join("")}</div>`;
+}
+function timerPalette(subjectColor, isRecovery = false) {
+  const base = normalizeHex(subjectColor || (isRecovery ? defaults.breaks.short.color : "#a7d8ff"));
+  const accent = mixHex(base, "#f7f3ea", .42);
+  return { base, accent, accent2: mixHex(base, "#f7f3ea", .68), ink: readableInk(base) };
+}
+function normalizeHex(value) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
+  if (/^#[0-9a-f]{3}$/i.test(raw)) return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  return "#a7d8ff";
+}
+function hexRgb(hex) {
+  const value = parseInt(normalizeHex(hex).slice(1), 16);
+  return { r: value >> 16, g: (value >> 8) & 255, b: value & 255 };
+}
+function mixHex(a, b, amount = .5) {
+  const from = hexRgb(a);
+  const to = hexRgb(b);
+  const mix = (x, y) => Math.round(x + (y - x) * amount).toString(16).padStart(2, "0");
+  return `#${mix(from.r, to.r)}${mix(from.g, to.g)}${mix(from.b, to.b)}`;
+}
+function readableInk(hex) {
+  const { r, g, b } = hexRgb(hex);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 165 ? "#0b1620" : "#ffffff";
+}
+function breakColor(type) {
+  return type === "medium" ? state.breaks.long.color || defaults.breaks.long.color : state.breaks.short.color || defaults.breaks.short.color;
 }
 
 function breakEditor(type, title, note, config) {
@@ -428,13 +565,13 @@ function buildTimeline(plan) {
       if (remainingStudyMinutes > 0 && shortBreak.activities.length) {
         const activity = pickActivity(shortBreak.activities, lastRecovery);
         lastRecovery = activity;
-        timeline.push({ type: "micro", subject: activity, minutes: shortBreak.minutes, color: subject.color, emoji: breakEmoji("micro", activity) });
+        timeline.push({ type: "micro", subject: activity, minutes: shortBreak.minutes, color: breakColor("micro"), emoji: breakEmoji("micro", activity) });
       }
     }
     if (subjectIndex < plan.length - 1 && longBreak.activities.length) {
       const activity = pickActivity(longBreak.activities, lastRecovery);
       lastRecovery = activity;
-      timeline.push({ type: "medium", subject: activity, minutes: longBreak.minutes, color: subject.color, emoji: breakEmoji("medium", activity) });
+      timeline.push({ type: "medium", subject: activity, minutes: longBreak.minutes, color: breakColor("medium"), emoji: breakEmoji("medium", activity) });
     }
   });
   return timeline;
@@ -492,12 +629,13 @@ function renderLive() {
   const predictedEnd = new Date(Date.now() + remainingTimelineSeconds() * 1000);
   const upcoming = live.timeline.slice(live.index + 1);
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
+  const palette = timerPalette(item.color, isRecovery);
   app.innerHTML = `
-    <main class="study-mode" style="--card-color:${item.color}; --card-left:${itemLeft}%; --black-width:${100 - itemLeft}%">
+    <main class="study-mode" style="--card-color:${palette.base}; --timer-accent:${palette.accent}; --timer-accent-2:${palette.accent2}; --timer-ink:${palette.ink}; --card-left:${itemLeft}%; --black-width:${100 - itemLeft}%">
       <section class="standby-card ${isRecovery ? "recovery-card" : ""}">
         <div class="empty-layer"></div>
         <div class="card-grain"></div>
-        <div class="time-cluster ${live.paused ? "is-break-active" : ""}"><div class="info-stack"><div class="commitment-clock priority-card" data-action="toggle-prediction"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div><div class="prediction-chip ${live.showPrediction ? "is-visible" : ""}" data-action="toggle-prediction"><p>Session Ends</p><b>${formatPredictedEnd(predictedEnd)}</b></div></div><div class="unplanned-card priority-card"><span>Unplanned Break</span><b>${fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000))}</b></div></div>
+        <div class="time-cluster ${live.paused ? "is-break-active" : ""}"><div class="info-stack"><div class="commitment-clock priority-card" data-action="toggle-prediction"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div><div class="prediction-chip ${live.showPrediction ? "is-visible" : ""}" data-action="toggle-prediction"><p>Session Ends</p><b data-predicted-end>${formatPredictedEnd(predictedEnd)}</b></div></div><div class="unplanned-card priority-card ${live.paused ? "is-active" : ""}"><span>Unplanned Break</span><b>${fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000))}</b></div></div>
         <button class="end-session-btn" data-action="request-end-session">End</button>
         <div class="standby-content">
           <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "•"}</div></div>
@@ -522,9 +660,10 @@ function remainingTimelineSeconds() {
   return live.timeline.slice(live.index + 1).reduce((sum, item) => sum + item.minutes * 60, Math.max(0, live.remaining));
 }
 function formatPredictedEnd(date) {
-  return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}<br>${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true })}`;
-}
-function skipBreakDialog() {
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+  const day = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${time} • ${day}`;
+}function skipBreakDialog() {
   return `
     <div class="overlay end-overlay"><section class="sheet confirm-sheet"><p class="eyebrow">Tiny check-in</p><h2>Skip this break? \uD83C\uDF3F</h2><p class="copy">Your brain might need these few minutes. If you still feel clear and ready, you can return to study now.</p><div class="sheet-actions"><button class="soft-btn" data-action="keep-break">Take the break</button><button class="tiny-btn skip-confirm" data-action="confirm-skip-break">Yes, skip break</button></div></section></div>`;
 }
@@ -578,6 +717,8 @@ function updateLiveDisplay() {
   if (unplanned) unplanned.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
   const countdown = document.querySelector("[data-countdown]");
   if (countdown) countdown.textContent = fmtClock(live.remaining);
+  const predicted = document.querySelector("[data-predicted-end]");
+  if (predicted) predicted.textContent = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
   const item = live.timeline[live.index];
   const duration = item.minutes * 60;
   const itemLeft = clamp((live.remaining / duration) * 100, 0, 100);
@@ -836,6 +977,17 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-sound]").forEach((btn) => btn.addEventListener("click", () => { state.sound = btn.dataset.sound; saveState(); render(); playMainNotification(); }));
+  document.querySelectorAll("[data-palette-theme]").forEach((select) => select.addEventListener("change", () => {
+    state.paletteTheme = select.value;
+    state.colorAssignments = normalizeColorAssignments(state.colorAssignments);
+    applySectionAssignments();
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-assign-color]").forEach((btn) => btn.addEventListener("click", () => {
+    const [colorIndex, sectionId] = btn.dataset.assignColor.split(":");
+    assignPaletteColor(Number(colorIndex), sectionId);
+  }));
   document.querySelectorAll("[data-theme]").forEach((btn) => btn.addEventListener("click", () => { state.theme = btn.dataset.theme; applyTheme(); saveState(); render(); }));
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
@@ -887,7 +1039,7 @@ function bindBreakReviewEvents() {
 }
 
 function exportProfile() {
-  const data = { schema: "focusapp.profile", version: "10.01", exportedAt: new Date().toISOString(), state, activeSession: live || null };
+  const data = { schema: "focusapp.profile", version: "10.08", exportedAt: new Date().toISOString(), state, activeSession: live || null };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1014,6 +1166,10 @@ window.addEventListener("beforeunload", saveActiveSession);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 applyTheme();
 render();
+
+
+
+
 
 
 
