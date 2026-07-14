@@ -244,10 +244,19 @@ function loadActiveSession() {
   } catch { return null; }
 }
 function reconcileActiveSession(saved) {
-  const elapsedAway = saved.paused ? 0 : Math.max(0, (Date.now() - Number(saved.savedAt || Date.now())) / 1000);
+  const awayMs = Math.max(0, Date.now() - Number(saved.savedAt || Date.now()));
+  const elapsedAway = saved.paused ? 0 : awayMs / 1000;
+  if (saved.paused) {
+    saved.currentBreakMs = (saved.currentBreakMs || 0) + awayMs;
+    saved.elapsedMs = (saved.elapsedMs || 0) + awayMs;
+  }
   saved.lastTickAt = performance.now();
   saved.endStep = null;
   saved.skipStep = null;
+  saved.infoView = saved.infoView || "end";
+  saved.currentBreakMs = saved.currentBreakMs || 0;
+  saved.infoResetAt = 0;
+  saved.infoFlashUntil = 0;
   return advanceSavedSession(saved, elapsedAway);
 }
 function advanceSavedSession(session, seconds) {
@@ -409,7 +418,7 @@ function customization() {
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 10.08</p>
+    <p class="app-version">Focus app version 11.1</p>
   `;
 }
 function colorName(color, index) {
@@ -465,10 +474,10 @@ function breakEditor(type, title, note, config) {
 }
 function soundOptions() {
   return [
-    { id: "steady", name: "Steady Beep", freq: 1850, gain: .34 },
-    { id: "bright", name: "Bright Beep", freq: 2300, gain: .28 },
-    { id: "urgent", name: "Urgent Beep", freq: 2650, gain: .36 },
-    { id: "piercing", name: "Max Beep", freq: 3100, gain: .32 }
+    { id: "steady", name: "Attention Seeker", freq: 1850, gain: .34, type: "attention" },
+    { id: "soft", name: "Soft Chime", freq: 880, gain: .18, type: "chime" },
+    { id: "zen", name: "Zen Bell", freq: 520, gain: .24, type: "bell" },
+    { id: "ticks", name: "Digital Ticks", freq: 1320, gain: .16, type: "ticks" }
   ];
 }
 function themeMood(id) {
@@ -614,7 +623,7 @@ function beginLive(timeline) {
   live = {
     id: uid(), timeline, index: 0, remaining: timeline[0].minutes * 60, paused: false,
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
-    focusedMs: 0, unplannedBreakMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null, showPrediction: false, adjustStep: false
+    focusedMs: 0, unplannedBreakMs: 0, currentBreakMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null, infoView: "end", infoResetAt: 0, infoFlashUntil: 0, adjustStep: false
   };
   saveActiveSession();
   render();
@@ -630,12 +639,13 @@ function renderLive() {
   const upcoming = live.timeline.slice(live.index + 1);
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
   const palette = timerPalette(item.color, isRecovery);
+  const liveStateClass = `${isRecovery ? "is-scheduled-break" : "is-study-session"} ${live.paused ? "is-unplanned-break" : ""}`;
   app.innerHTML = `
-    <main class="study-mode" style="--card-color:${palette.base}; --timer-accent:${palette.accent}; --timer-accent-2:${palette.accent2}; --timer-ink:${palette.ink}; --card-left:${itemLeft}%; --black-width:${100 - itemLeft}%">
+    <main class="study-mode ${liveStateClass}" style="--card-color:${palette.base}; --timer-accent:${palette.accent}; --timer-accent-2:${palette.accent2}; --timer-ink:${palette.ink}; --card-left:${itemLeft}%; --black-width:${100 - itemLeft}%">
       <section class="standby-card ${isRecovery ? "recovery-card" : ""}">
         <div class="empty-layer"></div>
         <div class="card-grain"></div>
-        <div class="time-cluster ${live.paused ? "is-break-active" : ""}"><div class="info-stack"><div class="commitment-clock priority-card" data-action="toggle-prediction"><span>Total</span><strong data-commitment-time>${fmtDuration(totalCommitmentSeconds)}</strong></div><div class="prediction-chip ${live.showPrediction ? "is-visible" : ""}" data-action="toggle-prediction"><p>Session Ends</p><b data-predicted-end>${formatPredictedEnd(predictedEnd)}</b></div></div><div class="unplanned-card priority-card ${live.paused ? "is-active" : ""}"><span>Unplanned Break</span><b>${fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000))}</b></div></div>
+        ${sessionInfoCard(predictedEnd, totalCommitmentSeconds)}
         <button class="end-session-btn" data-action="request-end-session">End</button>
         <div class="standby-content">
           <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "•"}</div></div>
@@ -655,6 +665,31 @@ function renderLive() {
 }
 
 function adjustPopup() { return `<div class="adjust-popup"><button data-action="adjust-current" data-delta="-5">-5 min</button><button data-action="adjust-current" data-delta="5">+5 min</button></div>`; }
+function sessionInfoCard(predictedEnd, totalCommitmentSeconds) {
+  const view = live.paused ? "paused" : (live.infoView || "end");
+  const rows = live.paused
+    ? [
+        ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"],
+        ["Current Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break"]
+      ]
+    : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
+  return `<button class="session-info-card ${live.paused ? "is-paused" : ""}" data-action="cycle-session-info">${rows.map(([label, value, key]) => `<span class="session-info-row is-${key}"><small>${label}</small><strong data-session-info="${key}">${value}</strong></span>`).join("")}</button>`;
+}
+function sessionInfoRow(view, predictedEnd, totalCommitmentSeconds) {
+  if (view === "breakTotal") return ["Unplanned Break Total", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total"];
+  if (view === "total") return ["Total Session Time", fmtDuration(totalCommitmentSeconds), "total"];
+  return ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"];
+}
+function cycleSessionInfo() {
+  if (!live || live.paused) return;
+  const order = ["end", "breakTotal", "total"];
+  const current = order.includes(live.infoView) ? live.infoView : "end";
+  live.infoView = order[(order.indexOf(current) + 1) % order.length];
+  live.infoResetAt = Date.now() + 4000;
+  live.infoFlashUntil = 0;
+  saveActiveSession();
+  renderLive();
+}
 function remainingTimelineSeconds() {
   if (!live) return 0;
   return live.timeline.slice(live.index + 1).reduce((sum, item) => sum + item.minutes * 60, Math.max(0, live.remaining));
@@ -693,8 +728,7 @@ function recoveryEmoji(activity) {
   const delta = deltaMs / 1000;
   live.lastTickAt = now;
   live.elapsedMs = (live.elapsedMs || 0) + deltaMs;
-  updateLiveDisplay();
-  if (live.paused) live.unplannedBreakMs = (live.unplannedBreakMs || 0) + deltaMs;
+  if (live.paused) live.currentBreakMs = (live.currentBreakMs || 0) + deltaMs;
   if (!live.paused && delta) {
     const item = live.timeline[live.index];
     if (item.type === "study") live.focusedMs = (live.focusedMs || 0) + deltaMs;
@@ -711,14 +745,27 @@ function recoveryEmoji(activity) {
 function updateLiveDisplay() {
   if (!live) return;
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
-  const commitment = document.querySelector("[data-commitment-time]");
-  if (commitment) commitment.textContent = fmtDuration(totalCommitmentSeconds);
-  const unplanned = document.querySelector(".unplanned-card b");
-  if (unplanned) unplanned.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
   const countdown = document.querySelector("[data-countdown]");
   if (countdown) countdown.textContent = fmtClock(live.remaining);
-  const predicted = document.querySelector("[data-predicted-end]");
+  const now = Date.now();
+  if (!live.paused && live.infoResetAt && now >= live.infoResetAt && live.infoView !== "end") {
+    live.infoView = "end";
+    live.infoResetAt = 0;
+    return renderLive();
+  }
+  if (!live.paused && live.infoFlashUntil && now >= live.infoFlashUntil) {
+    live.infoView = "end";
+    live.infoFlashUntil = 0;
+    return renderLive();
+  }
+  const predicted = document.querySelector("[data-session-info=\"predicted\"]");
   if (predicted) predicted.textContent = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
+  const breakTotal = document.querySelector("[data-session-info=\"break-total\"]");
+  if (breakTotal) breakTotal.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
+  const currentBreak = document.querySelector("[data-session-info=\"current-break\"]");
+  if (currentBreak) currentBreak.textContent = fmtDuration(Math.floor((live.currentBreakMs || 0)/1000));
+  const total = document.querySelector("[data-session-info=\"total\"]");
+  if (total) total.textContent = fmtDuration(totalCommitmentSeconds);
   const item = live.timeline[live.index];
   const duration = item.minutes * 60;
   const itemLeft = clamp((live.remaining / duration) * 100, 0, 100);
@@ -825,6 +872,9 @@ async function playMainNotification() {
     const master = audioContext.createGain();
     master.gain.setValueAtTime(1, now);
     master.connect(audioContext.destination);
+    if (selected.type === "chime") return playTonePattern(master, now, [{ t: 0, f: 880, d: 1.4, g: .16, wave: "sine" }, { t: .18, f: 1320, d: 1.1, g: .08, wave: "sine" }, { t: 1.35, f: 660, d: 1.2, g: .11, wave: "triangle" }]);
+    if (selected.type === "bell") return playTonePattern(master, now, [{ t: 0, f: 520, d: 2.6, g: .22, wave: "sine" }, { t: .03, f: 1040, d: 1.8, g: .08, wave: "triangle" }, { t: .08, f: 390, d: 2.8, g: .08, wave: "sine" }]);
+    if (selected.type === "ticks") return playTonePattern(master, now, [{ t: 0, f: 1320, d: .18, g: .16, wave: "square" }, { t: .55, f: 1480, d: .18, g: .14, wave: "square" }, { t: 1.1, f: 1320, d: .18, g: .14, wave: "square" }, { t: 1.65, f: 1660, d: .22, g: .16, wave: "square" }, { t: 2.25, f: 1320, d: .18, g: .12, wave: "square" }, { t: 2.75, f: 1480, d: .18, g: .1, wave: "square" }]);
     [selected.freq, selected.freq * 1.015].forEach((freq, index) => {
       const osc = audioContext.createOscillator();
       const gain = audioContext.createGain();
@@ -832,15 +882,30 @@ async function playMainNotification() {
       osc.frequency.setValueAtTime(freq, now);
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(index ? selected.gain * .34 : selected.gain, now + 0.035);
-      gain.gain.setValueAtTime(index ? selected.gain * .34 : selected.gain, now + 1.86);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 2);
+      gain.gain.setValueAtTime(index ? selected.gain * .34 : selected.gain, now + 2.7);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3);
       osc.connect(gain).connect(master);
       osc.start(now);
-      osc.stop(now + 2.05);
+      osc.stop(now + 3.05);
     });
   } catch (error) {
     console.warn("Chime could not play", error);
   }
+}
+function playTonePattern(master, now, tones) {
+  tones.forEach((tone) => {
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const start = now + tone.t;
+    osc.type = tone.wave;
+    osc.frequency.setValueAtTime(tone.f, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(tone.g, start + 0.035);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + tone.d);
+    osc.connect(gain).connect(master);
+    osc.start(start);
+    osc.stop(start + tone.d + .04);
+  });
 }
 async function playCountdownBeep() {
   try {
@@ -1039,7 +1104,7 @@ function bindBreakReviewEvents() {
 }
 
 function exportProfile() {
-  const data = { schema: "focusapp.profile", version: "10.08", exportedAt: new Date().toISOString(), state, activeSession: live || null };
+  const data = { schema: "focusapp.profile", version: "11.1", exportedAt: new Date().toISOString(), state, activeSession: live || null };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1080,7 +1145,7 @@ function handleAction(event) {
   if (action === "start-reviewed-session") startLive();
   if (action === "test-chime") playMainNotification();
   if (action === "pause-live") togglePause();
-  if (action === "toggle-prediction") { live.showPrediction = !live.showPrediction; renderLive(); }
+  if (action === "cycle-session-info") cycleSessionInfo();
   if (action === "adjust-current") { live.remaining = Math.max(60, live.remaining + Number(event.currentTarget.dataset.delta) * 60); live.timeline[live.index].minutes = Math.max(1, Math.ceil(live.remaining / 60)); live.adjustStep = true; saveActiveSession(); renderLive(); }
   if (action === "export-profile") exportProfile();
   if (action === "request-skip-break") { live.skipStep = "confirm"; renderLive(); }
@@ -1115,10 +1180,20 @@ function togglePause() {
   if (!live) return;
   playToggleSound();
   if (live.paused) {
+    live.unplannedBreakMs = (live.unplannedBreakMs || 0) + (live.currentBreakMs || 0);
+    live.currentBreakMs = 0;
     live.paused = false;
+    live.infoView = "breakTotal";
+    live.infoFlashUntil = Date.now() + 1000;
+    live.infoResetAt = 0;
     live.lastTickAt = performance.now();
   } else {
     live.paused = true;
+    live.currentBreakMs = 0;
+    live.infoView = "end";
+    live.infoResetAt = 0;
+    live.infoFlashUntil = 0;
+    live.lastTickAt = performance.now();
   }
   saveActiveSession();
   renderLive();
@@ -1166,6 +1241,8 @@ window.addEventListener("beforeunload", saveActiveSession);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 applyTheme();
 render();
+
+
 
 
 

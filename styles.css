@@ -2313,6 +2313,57 @@ textarea:focus-visible {
   transform: translateY(0) scale(1.04) !important;
   opacity: 1 !important;
 }
+.session-info-card {
+  position: absolute;
+  z-index: 9;
+  top: max(18px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
+  width: 224px;
+  min-height: 72px;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.3);
+  background: rgba(247,241,232,.9);
+  color: #17202a;
+  text-align: left;
+  box-shadow: 0 14px 32px rgba(0,0,0,.16);
+  transform-origin: left top;
+  transition: opacity 420ms ease, transform 520ms cubic-bezier(.2,.85,.22,1), background 420ms ease, box-shadow 420ms ease;
+}
+.session-info-card:active {
+  transform: scale(.98);
+}
+.session-info-card.is-paused {
+  width: 224px;
+  min-height: 118px;
+  background: rgba(247,241,232,.96);
+  box-shadow: 0 18px 42px rgba(0,0,0,.22);
+}
+.session-info-row {
+  display: grid;
+  gap: 4px;
+}
+.session-info-row + .session-info-row {
+  padding-top: 8px;
+  border-top: 1px solid rgba(23,32,42,.12);
+}
+.session-info-row small {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 950;
+  text-transform: uppercase;
+  color: rgba(23,32,42,.56);
+}
+.session-info-row strong {
+  font-size: 18px;
+  line-height: 1.08;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+  color: #17202a;
+  white-space: nowrap;
+}
 .study-mode,
 .study-mode .empty-layer,
 .study-mode .skip-break-btn,
@@ -2348,7 +2399,7 @@ textarea:focus-visible {
 }
 .skip-break-btn {
   background: var(--action-skip) !important;
-  color: #101820 !important;
+  color: #f7f1e8 !important;
   border-color: color-mix(in srgb, var(--action-skip) 46%, #f7f1e8) !important;
   box-shadow: 0 12px 28px color-mix(in srgb, var(--action-skip) 25%, transparent) !important;
 }
@@ -2356,7 +2407,12 @@ textarea:focus-visible {
   background: var(--action-end) !important;
   color: #f7f1e8 !important;
   border-color: color-mix(in srgb, var(--action-end) 62%, #f7f1e8) !important;
-  opacity: .86;
+  opacity: .3;
+  transition: opacity 260ms ease, transform 220ms ease, background 220ms ease;
+}
+.study-mode.is-unplanned-break .end-session-btn,
+.study-mode.is-scheduled-break .end-session-btn {
+  opacity: 1;
 }
 .end-session-btn:hover,
 .end-session-btn:focus-visible {
