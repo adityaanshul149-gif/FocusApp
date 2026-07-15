@@ -91,7 +91,8 @@ const defaults = {
   theme: "focus",
   sound: "steady",
   paletteTheme: "candy",
-  colorAssignments: { varc: 0, dilr: 1, quant: 2, short: 3, long: 4 }
+  colorAssignments: { varc: 0, dilr: 1, quant: 2, short: 3, long: 4 },
+  preferences: { autoPauseOnBlur: true }
 };
 
 let state = normalizeState(loadState());
@@ -121,6 +122,7 @@ function normalizeState(saved) {
   delete saved.timerUI;
   saved.paletteTheme = colorPalettes()[saved.paletteTheme] ? saved.paletteTheme : defaults.paletteTheme;
   saved.colorAssignments = normalizeColorAssignments(saved.colorAssignments);
+  saved.preferences = { ...defaults.preferences, ...(saved.preferences || {}) };
   applySectionAssignments(saved);
   return saved;
 }
@@ -255,6 +257,7 @@ function reconcileActiveSession(saved) {
   saved.skipStep = null;
   saved.infoView = saved.infoView || "end";
   saved.currentBreakMs = saved.currentBreakMs || 0;
+  saved.breakHistoryMs = Array.isArray(saved.breakHistoryMs) ? saved.breakHistoryMs : [];
   saved.infoResetAt = 0;
   saved.infoFlashUntil = 0;
   return advanceSavedSession(saved, elapsedAway);
@@ -343,6 +346,7 @@ function applyTheme() {
 function render() {
   clearInterval(ticker);
   applyTheme();
+  document.body.classList.toggle("pomodoro-active", !!live);
   app.className = live ? "app-shell live-shell" : "app-shell";
   if (live) return renderLive();
   app.innerHTML = `
@@ -416,9 +420,10 @@ function customization() {
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Section colors</h2><p class="eyebrow">Choose a curated palette and assign one color to each section.</p></div></div>${sectionColorEditor()}</section>
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Focus protection</h2><p class="eyebrow">Pause study automatically when the app is interrupted.</p></div></div><label class="setting-row toggle-row"><span>Auto Pause When App Loses Focus</span><input type="checkbox" data-auto-pause-blur ${state.preferences.autoPauseOnBlur ? "checked" : ""}></label></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 11.1</p>
+    <p class="app-version">Focus app version 15.1</p>
   `;
 }
 function colorName(color, index) {
@@ -475,9 +480,9 @@ function breakEditor(type, title, note, config) {
 function soundOptions() {
   return [
     { id: "steady", name: "Attention Seeker", freq: 1850, gain: .34, type: "attention" },
-    { id: "soft", name: "Soft Chime", freq: 880, gain: .18, type: "chime" },
-    { id: "zen", name: "Zen Bell", freq: 520, gain: .24, type: "bell" },
-    { id: "ticks", name: "Digital Ticks", freq: 1320, gain: .16, type: "ticks" }
+    { id: "gentle", name: "Gentle Beep", freq: 1650, gain: .22, type: "attention" },
+    { id: "soft", name: "Soft Beep", freq: 1420, gain: .16, type: "attention" },
+    { id: "calm", name: "Calm Beep", freq: 1180, gain: .12, type: "attention" }
   ];
 }
 function themeMood(id) {
@@ -623,7 +628,7 @@ function beginLive(timeline) {
   live = {
     id: uid(), timeline, index: 0, remaining: timeline[0].minutes * 60, paused: false,
     startedAt: Date.now(), elapsedMs: 0, completedPomodoros: 0,
-    focusedMs: 0, unplannedBreakMs: 0, currentBreakMs: 0, lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null, infoView: "end", infoResetAt: 0, infoFlashUntil: 0, adjustStep: false
+    focusedMs: 0, unplannedBreakMs: 0, currentBreakMs: 0, breakHistoryMs: [], lastTickAt: performance.now(), endStep: null, endReason: "", skipStep: null, infoView: "end", infoResetAt: 0, infoFlashUntil: 0, awayBreakStartedAt: 0, nextAwayReminderAt: 0
   };
   saveActiveSession();
   render();
@@ -646,11 +651,11 @@ function renderLive() {
         <div class="empty-layer"></div>
         <div class="card-grain"></div>
         ${sessionInfoCard(predictedEnd, totalCommitmentSeconds)}
-        <button class="end-session-btn" data-action="request-end-session">End</button>
+        ${isRecovery || live.paused ? `<button class="end-session-btn" data-action="request-end-session">End</button>` : ""}
         <div class="standby-content">
           <div class="session-kicker"><p class="eyebrow">${isRecovery ? recoveryLabel(item.type) : "Now studying"}</p><div class="session-emoji">${item.emoji || "•"}</div></div>
-          <div class="subject" data-subject-adjust>${item.subject}</div>
-          <div class="timer-wrap"><div class="countdown" data-countdown>${fmtClock(live.remaining)}</div>${live.adjustStep ? adjustPopup() : ""}</div>
+          <div class="subject">${item.subject}</div>
+          <div class="timer-wrap"><div class="countdown" data-countdown>${fmtClock(live.remaining)}</div></div>
           <div class="live-actions">${isRecovery ? `<button class="skip-break-btn" data-action="request-skip-break">Skip Break</button>` : `<button class="pause-btn ${live.paused ? "is-paused" : ""}" data-action="pause-live">${live.paused ? "Resume" : "Unplanned Break"}</button>`}</div>
         </div>
       </section>
@@ -664,31 +669,66 @@ function renderLive() {
   ticker = setInterval(tick, 1000);
 }
 
-function adjustPopup() { return `<div class="adjust-popup"><button data-action="adjust-current" data-delta="-5">-5 min</button><button data-action="adjust-current" data-delta="5">+5 min</button></div>`; }
 function sessionInfoCard(predictedEnd, totalCommitmentSeconds) {
   const view = live.paused ? "paused" : (live.infoView || "end");
   const rows = live.paused
     ? [
         ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"],
-        ["Current Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break"]
+        ["Unplanned Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break", breakHistoryMarkup(false)]
       ]
     : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
-  return `<button class="session-info-card ${live.paused ? "is-paused" : ""}" data-action="cycle-session-info">${rows.map(([label, value, key]) => `<span class="session-info-row is-${key}"><small>${label}</small><strong data-session-info="${key}">${value}</strong></span>`).join("")}</button>`;
+  return `<button class="session-info-card ${live.paused ? "is-paused" : ""} is-view-${view}" data-action="cycle-session-info">${sessionInfoRowsHtml(rows)}</button>`;
+}
+function sessionInfoRowsHtml(rows) {
+  return rows.map(([label, value, key, extra]) => `<span class="session-info-row is-${key}"><small>${label}</small><strong data-session-info="${key}">${value}</strong>${extra || ""}</span>`).join("");
 }
 function sessionInfoRow(view, predictedEnd, totalCommitmentSeconds) {
-  if (view === "breakTotal") return ["Unplanned Break Total", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total"];
+  if (view === "resumeSummary") return [`${(live.breakHistoryMs || []).length} Breaks`, "", "resume-summary", `<span class="break-history resume-history">${breakHistoryHtml()}</span>`];
+  if (view === "breakTotal") return ["Unplanned Break", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total", breakHistoryMarkup(true)];
   if (view === "total") return ["Total Session Time", fmtDuration(totalCommitmentSeconds), "total"];
   return ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"];
 }
+function breakHistoryMarkup(includeTotal = true) {
+  const count = (live.breakHistoryMs || []).length;
+  return `<em class="break-count">${count} Breaks</em><span class="break-history">${breakHistoryHtml(includeTotal ? [] : [live.currentBreakMs || 0])}</span>`;
+}
+function breakHistoryItems(prefix = []) {
+  return [...prefix.filter(Boolean), ...(live.breakHistoryMs || [])].map((ms) => fmtCompactDuration(Math.floor(ms / 1000)));
+}
+function breakHistoryText(prefix = []) {
+  return breakHistoryItems(prefix).join(" | ") || "0m";
+}
+function breakHistoryHtml(prefix = []) {
+  return breakHistoryItems(prefix).join(" &bull; ") || "0m";
+}
+function fmtCompactDuration(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
+  return `${Math.max(1, m)}m`;
+}
 function cycleSessionInfo() {
   if (!live || live.paused) return;
+  playCardCycleSound();
   const order = ["end", "breakTotal", "total"];
   const current = order.includes(live.infoView) ? live.infoView : "end";
   live.infoView = order[(order.indexOf(current) + 1) % order.length];
   live.infoResetAt = Date.now() + 4000;
   live.infoFlashUntil = 0;
   saveActiveSession();
-  renderLive();
+  refreshSessionInfoCard();
+}
+function refreshSessionInfoCard() {
+  const card = document.querySelector(".session-info-card");
+  if (!card || !live) return renderLive();
+  const predictedEnd = new Date(Date.now() + remainingTimelineSeconds() * 1000);
+  const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
+  const view = live.paused ? "paused" : (live.infoView || "end");
+  const rows = live.paused ? [["Session Ends", formatPredictedEnd(predictedEnd), "predicted"], ["Unplanned Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break", breakHistoryMarkup(false)]] : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
+  card.className = `session-info-card ${live.paused ? "is-paused" : ""} is-view-${view}`;
+  card.innerHTML = sessionInfoRowsHtml(rows);
+  bindEvents();
 }
 function remainingTimelineSeconds() {
   if (!live) return 0;
@@ -697,7 +737,7 @@ function remainingTimelineSeconds() {
 function formatPredictedEnd(date) {
   const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
   const day = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `${time} • ${day}`;
+  return `${time} \u2022 ${day}`;
 }function skipBreakDialog() {
   return `
     <div class="overlay end-overlay"><section class="sheet confirm-sheet"><p class="eyebrow">Tiny check-in</p><h2>Skip this break? \uD83C\uDF3F</h2><p class="copy">Your brain might need these few minutes. If you still feel clear and ready, you can return to study now.</p><div class="sheet-actions"><button class="soft-btn" data-action="keep-break">Take the break</button><button class="tiny-btn skip-confirm" data-action="confirm-skip-break">Yes, skip break</button></div></section></div>`;
@@ -728,7 +768,10 @@ function recoveryEmoji(activity) {
   const delta = deltaMs / 1000;
   live.lastTickAt = now;
   live.elapsedMs = (live.elapsedMs || 0) + deltaMs;
-  if (live.paused) live.currentBreakMs = (live.currentBreakMs || 0) + deltaMs;
+  if (live.paused) {
+    live.currentBreakMs = (live.currentBreakMs || 0) + deltaMs;
+    maybeSendAwayReminder();
+  }
   if (!live.paused && delta) {
     const item = live.timeline[live.index];
     if (item.type === "study") live.focusedMs = (live.focusedMs || 0) + deltaMs;
@@ -762,6 +805,12 @@ function updateLiveDisplay() {
   if (predicted) predicted.textContent = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
   const breakTotal = document.querySelector("[data-session-info=\"break-total\"]");
   if (breakTotal) breakTotal.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
+  const breakCount = document.querySelector(".break-count");
+  if (breakCount) breakCount.textContent = `${(live.breakHistoryMs || []).length} Breaks`;
+  const breakHistory = document.querySelector(".break-history");
+  if (breakHistory) breakHistory.innerHTML = breakHistoryHtml(live.paused ? [live.currentBreakMs || 0] : []);
+  const resumeSummary = document.querySelector("[data-session-info=\"resume-summary\"]");
+  if (resumeSummary) resumeSummary.textContent = "";
   const currentBreak = document.querySelector("[data-session-info=\"current-break\"]");
   if (currentBreak) currentBreak.textContent = fmtDuration(Math.floor((live.currentBreakMs || 0)/1000));
   const total = document.querySelector("[data-session-info=\"total\"]");
@@ -872,9 +921,6 @@ async function playMainNotification() {
     const master = audioContext.createGain();
     master.gain.setValueAtTime(1, now);
     master.connect(audioContext.destination);
-    if (selected.type === "chime") return playTonePattern(master, now, [{ t: 0, f: 880, d: 1.4, g: .16, wave: "sine" }, { t: .18, f: 1320, d: 1.1, g: .08, wave: "sine" }, { t: 1.35, f: 660, d: 1.2, g: .11, wave: "triangle" }]);
-    if (selected.type === "bell") return playTonePattern(master, now, [{ t: 0, f: 520, d: 2.6, g: .22, wave: "sine" }, { t: .03, f: 1040, d: 1.8, g: .08, wave: "triangle" }, { t: .08, f: 390, d: 2.8, g: .08, wave: "sine" }]);
-    if (selected.type === "ticks") return playTonePattern(master, now, [{ t: 0, f: 1320, d: .18, g: .16, wave: "square" }, { t: .55, f: 1480, d: .18, g: .14, wave: "square" }, { t: 1.1, f: 1320, d: .18, g: .14, wave: "square" }, { t: 1.65, f: 1660, d: .22, g: .16, wave: "square" }, { t: 2.25, f: 1320, d: .18, g: .12, wave: "square" }, { t: 2.75, f: 1480, d: .18, g: .1, wave: "square" }]);
     [selected.freq, selected.freq * 1.015].forEach((freq, index) => {
       const osc = audioContext.createOscillator();
       const gain = audioContext.createGain();
@@ -891,21 +937,6 @@ async function playMainNotification() {
   } catch (error) {
     console.warn("Chime could not play", error);
   }
-}
-function playTonePattern(master, now, tones) {
-  tones.forEach((tone) => {
-    const osc = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    const start = now + tone.t;
-    osc.type = tone.wave;
-    osc.frequency.setValueAtTime(tone.f, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(tone.g, start + 0.035);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + tone.d);
-    osc.connect(gain).connect(master);
-    osc.start(start);
-    osc.stop(start + tone.d + .04);
-  });
 }
 async function playCountdownBeep() {
   try {
@@ -1042,6 +1073,7 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-sound]").forEach((btn) => btn.addEventListener("click", () => { state.sound = btn.dataset.sound; saveState(); render(); playMainNotification(); }));
+  document.querySelectorAll("[data-auto-pause-blur]").forEach((input) => input.addEventListener("change", () => { state.preferences.autoPauseOnBlur = input.checked; saveState(); }));
   document.querySelectorAll("[data-palette-theme]").forEach((select) => select.addEventListener("change", () => {
     state.paletteTheme = select.value;
     state.colorAssignments = normalizeColorAssignments(state.colorAssignments);
@@ -1057,7 +1089,6 @@ function bindEvents() {
   document.querySelectorAll("[data-edit-record]").forEach((btn) => btn.addEventListener("click", () => { modal = { type: "edit-confirm", id: btn.dataset.editRecord }; render(); }));
   document.querySelectorAll("[data-end-reason]").forEach((input) => input.addEventListener("input", () => { live.endReason = input.value; const btn = document.querySelector("[data-action=\"confirm-end-session\"]"); if (btn) btn.disabled = !live.endReason.trim(); }));
   document.querySelectorAll("[data-record-field]").forEach((input) => input.addEventListener("input", () => updateModalDraft(input)));
-  document.querySelectorAll("[data-subject-adjust]").forEach((el) => el.addEventListener("click", (event) => { event.stopPropagation(); if (live?.timeline[live.index]?.type === "study") { live.adjustStep = !live.adjustStep; renderLive(); } }));
   bindBreakReviewEvents();
   document.querySelectorAll("[data-import-profile]").forEach((input) => input.addEventListener("change", importProfile));
   setupDrag();
@@ -1104,7 +1135,7 @@ function bindBreakReviewEvents() {
 }
 
 function exportProfile() {
-  const data = { schema: "focusapp.profile", version: "11.1", exportedAt: new Date().toISOString(), state, activeSession: live || null };
+  const data = { schema: "focusapp.profile", version: "15.1", exportedAt: new Date().toISOString(), state, activeSession: live || null };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1135,6 +1166,7 @@ function updateModalDraft(input) {
 
 function handleAction(event) {
   unlockAudio();
+  requestReminderPermission();
   const action = event.currentTarget.dataset.action;
   if (action === "open-start") openStart();
   if (action === "close-flow") { flow = null; render(); }
@@ -1146,7 +1178,6 @@ function handleAction(event) {
   if (action === "test-chime") playMainNotification();
   if (action === "pause-live") togglePause();
   if (action === "cycle-session-info") cycleSessionInfo();
-  if (action === "adjust-current") { live.remaining = Math.max(60, live.remaining + Number(event.currentTarget.dataset.delta) * 60); live.timeline[live.index].minutes = Math.max(1, Math.ceil(live.remaining / 60)); live.adjustStep = true; saveActiveSession(); renderLive(); }
   if (action === "export-profile") exportProfile();
   if (action === "request-skip-break") { live.skipStep = "confirm"; renderLive(); }
   if (action === "keep-break") { live.skipStep = null; live.lastTickAt = performance.now(); renderLive(); }
@@ -1180,11 +1211,13 @@ function togglePause() {
   if (!live) return;
   playToggleSound();
   if (live.paused) {
-    live.unplannedBreakMs = (live.unplannedBreakMs || 0) + (live.currentBreakMs || 0);
+    const endedBreak = live.currentBreakMs || 0;
+    live.unplannedBreakMs = (live.unplannedBreakMs || 0) + endedBreak;
+    if (endedBreak > 0) live.breakHistoryMs = [endedBreak, ...(live.breakHistoryMs || [])];
     live.currentBreakMs = 0;
     live.paused = false;
-    live.infoView = "breakTotal";
-    live.infoFlashUntil = Date.now() + 1000;
+    live.infoView = "resumeSummary";
+    live.infoFlashUntil = Date.now() + 4000;
     live.infoResetAt = 0;
     live.lastTickAt = performance.now();
   } else {
@@ -1197,6 +1230,22 @@ function togglePause() {
   }
   saveActiveSession();
   renderLive();
+}
+async function playCardCycleSound() {
+  try {
+    await unlockAudio();
+    const now = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(620, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.035, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+    osc.connect(gain).connect(audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.085);
+  } catch {}
 }
 
 function setupDrag() {
@@ -1233,14 +1282,67 @@ document.addEventListener("touchend", (event) => {
   if (now - lastTouchEnd <= 300) event.preventDefault();
   lastTouchEnd = now;
 }, { passive: false });
+function autoPauseForFocusLoss() {
+  if (!live || live.paused || !state.preferences.autoPauseOnBlur) return;
+  const item = live.timeline[live.index];
+  if (!item || item.type !== "study") return;
+  live.paused = true;
+  live.currentBreakMs = 0;
+  live.awayBreakStartedAt = Date.now();
+  live.nextAwayReminderAt = Date.now() + 5 * 60 * 1000;
+  live.infoView = "end";
+  live.infoResetAt = 0;
+  live.infoFlashUntil = 0;
+  live.lastTickAt = performance.now();
+  saveActiveSession();
+}
+function maybeSendAwayReminder() {
+  if (!live?.paused || !live.awayBreakStartedAt || !live.nextAwayReminderAt) return;
+  const now = Date.now();
+  if (now < live.nextAwayReminderAt) return;
+  const awayMinutes = Math.max(1, Math.floor((now - live.awayBreakStartedAt) / 60000));
+  notifyAwayReminder(awayMinutes);
+  live.nextAwayReminderAt = now + 3 * 60 * 1000;
+  saveActiveSession();
+}
+function requestReminderPermission() {
+  try {
+    if (state.preferences.autoPauseOnBlur && "Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+  } catch {}
+}
+async function notifyAwayReminder(minutesAway) {
+  try {
+    if (!("Notification" in window)) return;
+    let permission = Notification.permission;
+    if (permission === "default") permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+    const ends = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
+    new Notification(`You've been away for ${minutesAway} minutes.`, { body: `Session Ends: ${ends}`, tag: "focusapp-away", silent: false });
+  } catch {}
+}
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) saveActiveSession();
+  if (document.hidden) autoPauseForFocusLoss();
+  saveActiveSession();
 });
 window.addEventListener("pagehide", saveActiveSession);
 window.addEventListener("beforeunload", saveActiveSession);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 applyTheme();
 render();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
