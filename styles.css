@@ -2845,3 +2845,44 @@ body.pomodoro-active .app-shell.live-shell {
   from { opacity: .72; }
   to { opacity: 1; }
 }
+
+/* v23 break history polish */
+.break-history-card {
+  height: 158px !important;
+  grid-template-rows: auto 1fr !important;
+  gap: 8px !important;
+  padding: 13px 15px 12px !important;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 230ms ease-in-out, transform 230ms ease-in-out !important;
+}
+.break-history-card.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition-duration: 280ms !important;
+  transition-timing-function: ease-out !important;
+}
+.break-history-head { gap: 0 !important; }
+.break-history-head span,
+.break-history-card footer { display: none !important; }
+.break-history-list {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding-right: 1px !important;
+}
+.break-history-entry {
+  min-height: 30px !important;
+  border-bottom: 0 !important;
+  gap: 6px !important;
+  animation: breakEntryIn 280ms ease-out both;
+}
+.break-history-entry strong,
+.break-history-entry time { font-size: 12px !important; }
+.break-history-entry .break-dot { font-size: 13px !important; }
+.break-history-empty { font-size: 12px !important; }
+@media (orientation: portrait) {
+  body.pomodoro-active .break-history-card {
+    height: 150px !important;
+  }
+}

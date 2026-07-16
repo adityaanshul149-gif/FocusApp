@@ -455,7 +455,7 @@ function customization() {
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 22</p>
+    <p class="app-version">Version 23</p>
   `;
 }
 function colorName(color, index) {
@@ -715,8 +715,8 @@ function sessionInfoRowsHtml(rows) {
   return rows.map(([label, value, key, extra]) => `<span class="session-info-row is-${key}"><small>${label}</small><strong data-session-info="${key}">${value}</strong>${extra || ""}</span>`).join("");
 }
 function sessionInfoRow(view, predictedEnd, totalCommitmentSeconds) {
-  if (view === "resumeSummary") return ["Total Unplanned Break", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total"];
-  if (view === "breakTotal") return ["Total Unplanned Break", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total"];
+  if (view === "resumeSummary") return ["Total Unplanned Break", unplannedBreakSummary(), "break-total"];
+  if (view === "breakTotal") return ["Total Unplanned Break", unplannedBreakSummary(), "break-total"];
   if (view === "total") return ["Total Session Time", fmtDuration(totalCommitmentSeconds), "total"];
   return ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"];
 }
@@ -724,12 +724,15 @@ function breakHistoryCard() {
   const visible = live?.paused || live?.infoView === "breakTotal";
   const entries = normalizeBreakHistory(live?.breakHistory || live?.breakHistoryMs);
   return `<section class="break-history-card ${visible ? "is-visible" : ""}" aria-hidden="${visible ? "false" : "true"}">
-    <div class="break-history-head"><small>UNPLANNED BREAKS</small><span>Latest Breaks</span></div>
+    <div class="break-history-head"><small>UNPLANNED BREAKS</small></div>
     <div class="break-history-list">
       ${entries.length ? entries.map((entry, index) => `<div class="break-history-entry" style="--entry-index:${Math.min(index, 6)}"><span class="break-dot">•</span><strong>${fmtBreakEntryDuration(entry.durationMs)}</strong><time>${formatBreakResumeTime(entry.resumedAt)}</time></div>`).join("") : `<div class="break-history-empty">No unplanned breaks yet.<br><span>Great job staying focused.</span></div>`}
     </div>
-    <footer>${entries.length} Breaks</footer>
   </section>`;
+}
+function unplannedBreakSummary() {
+  const count = normalizeBreakHistory(live.breakHistory || live.breakHistoryMs).length;
+  return `${fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000))} • ${count} Breaks`;
 }
 function breakHistoryItems(prefix = []) {
   const history = normalizeBreakHistory(live.breakHistory || live.breakHistoryMs).map((entry) => entry.durationMs);
@@ -864,7 +867,7 @@ function updateLiveDisplay() {
   const predicted = document.querySelector("[data-session-info=\"predicted\"]");
   if (predicted) predicted.textContent = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
   const breakTotal = document.querySelector("[data-session-info=\"break-total\"]");
-  if (breakTotal) breakTotal.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
+  if (breakTotal) breakTotal.textContent = unplannedBreakSummary();
   const resumeSummary = document.querySelector("[data-session-info=\"resume-summary\"]");
   if (resumeSummary) resumeSummary.textContent = "";
   const currentBreak = document.querySelector("[data-session-info=\"current-break\"]");
@@ -1243,7 +1246,7 @@ function exportProfile() {
   const data = {
     schema: "focusapp.backup",
     version: 2,
-    appVersion: "22",
+    appVersion: "23",
     exportedAt: new Date().toISOString(),
     state,
     activeSession,
@@ -1354,7 +1357,7 @@ function togglePause() {
     }
     live.currentBreakMs = 0;
     live.paused = false;
-    live.infoView = "breakTotal";
+    live.infoView = "end";
     live.infoFlashUntil = 0;
     live.infoResetAt = 0;
     live.lastTickAt = performance.now();
