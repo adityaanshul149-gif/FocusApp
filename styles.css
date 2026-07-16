@@ -2553,3 +2553,101 @@ body.pomodoro-active .study-mode {
     bottom: max(20px, env(safe-area-inset-bottom)) !important;
   }
 }
+
+/* v20 natural orientation and unified motion polish */
+body.pomodoro-active {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+}
+body.pomodoro-active .app-shell.live-shell {
+  width: 100% !important;
+  height: 100svh !important;
+  overflow: hidden !important;
+  background: #070808 !important;
+}
+@media (orientation: portrait) {
+  body.pomodoro-active .study-mode {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: 100svh !important;
+    min-width: 0 !important;
+    min-height: 100svh !important;
+    transform: none !important;
+    transform-origin: center !important;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important;
+    transition: padding 280ms ease-out, transform 280ms ease-out !important;
+  }
+  body.pomodoro-active .standby-card { inset: 8px !important; }
+  body.pomodoro-active .standby-content {
+    padding: clamp(80px, 15svh, 130px) 18px clamp(120px, 22svh, 170px) !important;
+    transform: none !important;
+    transition: padding 280ms ease-out !important;
+  }
+  body.pomodoro-active .standby-card .countdown {
+    font-size: clamp(72px, 23vw, 128px) !important;
+  }
+  body.pomodoro-active .session-kicker { margin-top: 0 !important; }
+  body.pomodoro-active .floating-stack {
+    right: 12px !important;
+    bottom: max(14px, env(safe-area-inset-bottom)) !important;
+    width: min(58vw, 330px) !important;
+    max-width: min(58vw, 330px) !important;
+  }
+  body.pomodoro-active .live-actions {
+    left: max(16px, env(safe-area-inset-left)) !important;
+    bottom: max(18px, env(safe-area-inset-bottom)) !important;
+  }
+}
+.study-mode,
+.standby-card,
+.standby-content,
+.session-info-card,
+.floating-stack,
+.live-actions {
+  transition-timing-function: cubic-bezier(.2,.8,.2,1) !important;
+}
+.session-info-card,
+.break-history,
+.resume-history {
+  animation: uiRiseIn 280ms ease-out both;
+}
+.celebration {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 120 !important;
+  display: grid !important;
+  place-items: center !important;
+  pointer-events: none !important;
+  background: rgba(5, 5, 6, .96) !important;
+  opacity: 1 !important;
+  animation: overlayIn 280ms ease-out both !important;
+  overflow: hidden !important;
+}
+.celebration.small,
+.celebration.big {
+  background: radial-gradient(circle at center, rgba(255,255,255,.08), transparent 34%), rgba(5,5,6,.96) !important;
+}
+.celebration-card {
+  width: min(86vw, 520px) !important;
+  display: grid !important;
+  place-items: center !important;
+  gap: 10px !important;
+  text-align: center !important;
+  color: #f7f1e8 !important;
+  text-shadow: none !important;
+  transform: translateY(10px) scale(.98);
+  animation: uiRiseIn 300ms ease-out 60ms both !important;
+}
+.celebration.small .celebration-card h2 { font-size: clamp(34px, 7vw, 72px) !important; }
+.celebration-card .burst { font-size: clamp(46px, 9vw, 88px) !important; }
+@keyframes uiRiseIn {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

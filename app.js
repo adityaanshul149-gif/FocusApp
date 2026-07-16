@@ -235,7 +235,39 @@ function loadState() {
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function saveActiveSession() {
   if (!live) return localStorage.removeItem(ACTIVE_SESSION_KEY);
-  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ ...live, savedAt: Date.now(), endStep: null, endReason: "", skipStep: null }));
+  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(activeSessionSnapshot()));
+}
+function normalizeBreakHistory(source) {
+  const list = Array.isArray(source) ? source : [];
+  return list.map((entry, index) => {
+    if (typeof entry === "number") return { id: uid(), durationMs: Math.max(0, entry), resumedAt: "", order: index };
+    return {
+      id: entry.id || uid(),
+      durationMs: Math.max(0, Number(entry.durationMs ?? entry.duration ?? entry.ms ?? 0)),
+      resumedAt: typeof entry.resumedAt === "string" ? entry.resumedAt : "",
+      order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : index
+    };
+  }).filter((entry) => entry.durationMs > 0).sort((a, b) => a.order - b.order);
+}
+function activeSessionSnapshot() {
+  if (!live) return null;
+  const item = live.timeline?.[live.index] || null;
+  const breakHistory = normalizeBreakHistory(live.breakHistory || live.breakHistoryMs);
+  const snapshot = {
+    ...live,
+    savedAt: Date.now(),
+    endStep: null,
+    endReason: "",
+    skipStep: null,
+    breakHistory,
+    sessionState: live.paused ? "Current Break" : item?.type === "study" ? "Study" : item?.type === "micro" ? "Short Break" : item?.type === "medium" ? "Long Break" : "Unknown",
+    scheduledEndAt: new Date(Date.now() + remainingTimelineSeconds() * 1000).toISOString(),
+    currentCycle: live.index,
+    breakCount: breakHistory.length,
+    totalUnplannedBreakMs: live.unplannedBreakMs || 0
+  };
+  snapshot.breakHistoryMs = breakHistory.map((entry) => entry.durationMs);
+  return snapshot;
 }
 function loadActiveSession() {
   try {
@@ -255,7 +287,9 @@ function reconcileActiveSession(saved) {
   saved.skipStep = null;
   saved.infoView = saved.infoView || "end";
   saved.currentBreakMs = saved.currentBreakMs || 0;
-  saved.breakHistoryMs = Array.isArray(saved.breakHistoryMs) ? saved.breakHistoryMs : [];
+  saved.breakHistory = normalizeBreakHistory(saved.breakHistory || saved.breakHistoryMs);
+  saved.breakHistoryMs = saved.breakHistory.map((entry) => entry.durationMs);
+  saved.unplannedBreakMs = saved.breakHistory.reduce((sum, entry) => sum + entry.durationMs, 0);
   saved.infoResetAt = 0;
   saved.infoFlashUntil = 0;
   return advanceSavedSession(saved, elapsedAway);
@@ -388,9 +422,8 @@ function emptyHistory() {
 
 function historyTable(rows) {
   return `
-    <div class="history-actions"><button class="history-delete" data-action="clear-history">Clear</button></div>
     <table class="history-table">
-      <thead><tr><th>Date</th><th>Total</th><th>Focus</th><th>Unplanned</th><th>Pomodoros</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Total</th><th>Focus</th><th>Total Unplanned Break</th><th>Pomodoros</th><th>Status</th><th>Reason</th><th></th></tr></thead>
       <tbody>${rows.map((record) => `
         <tr>
           <td>${escapeHtml(record.date)}</td>
@@ -420,7 +453,7 @@ function customization() {
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 15.1</p>
+    <p class="app-version">Focus app version 21</p>
   `;
 }
 function colorName(color, index) {
@@ -671,7 +704,7 @@ function sessionInfoCard(predictedEnd, totalCommitmentSeconds) {
   const rows = live.paused
     ? [
         ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"],
-        ["Unplanned Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break", breakHistoryMarkup(false)]
+        ["Current Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break", breakHistoryMarkup(false)]
       ]
     : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
   return `<button class="session-info-card ${live.paused ? "is-paused" : ""} is-view-${view}" data-action="cycle-session-info">${sessionInfoRowsHtml(rows)}</button>`;
@@ -680,17 +713,18 @@ function sessionInfoRowsHtml(rows) {
   return rows.map(([label, value, key, extra]) => `<span class="session-info-row is-${key}"><small>${label}</small><strong data-session-info="${key}">${value}</strong>${extra || ""}</span>`).join("");
 }
 function sessionInfoRow(view, predictedEnd, totalCommitmentSeconds) {
-  if (view === "resumeSummary") return [`${(live.breakHistoryMs || []).length} Breaks`, "", "resume-summary", `<span class="break-history resume-history">${breakHistoryHtml()}</span>`];
-  if (view === "breakTotal") return ["Unplanned Break", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total", breakHistoryMarkup(true)];
+  if (view === "resumeSummary") return [`${normalizeBreakHistory(live.breakHistory || live.breakHistoryMs).length} Breaks`, "", "resume-summary", `<span class="break-history resume-history">${breakHistoryHtml()}</span>`];
+  if (view === "breakTotal") return ["Total Unplanned Break", fmtDuration(Math.floor((live.unplannedBreakMs || 0) / 1000)), "break-total", breakHistoryMarkup(true)];
   if (view === "total") return ["Total Session Time", fmtDuration(totalCommitmentSeconds), "total"];
   return ["Session Ends", formatPredictedEnd(predictedEnd), "predicted"];
 }
 function breakHistoryMarkup(includeTotal = true) {
-  const count = (live.breakHistoryMs || []).length;
-  return `<em class="break-count">${count} Breaks</em><span class="break-history">${breakHistoryHtml(includeTotal ? [] : [live.currentBreakMs || 0])}</span>`;
+  const count = normalizeBreakHistory(live.breakHistory || live.breakHistoryMs).length;
+  return `<em class="break-count">${count} Unplanned Breaks</em><span class="break-history">${breakHistoryHtml(includeTotal ? [] : [live.currentBreakMs || 0])}</span>`;
 }
 function breakHistoryItems(prefix = []) {
-  return [...prefix.filter(Boolean), ...(live.breakHistoryMs || [])].map((ms) => fmtCompactDuration(Math.floor(ms / 1000)));
+  const history = normalizeBreakHistory(live.breakHistory || live.breakHistoryMs).map((entry) => entry.durationMs);
+  return [...prefix.filter(Boolean), ...history].map((ms) => fmtCompactDuration(Math.floor(ms / 1000)));
 }
 function breakHistoryText(prefix = []) {
   return breakHistoryItems(prefix).join(" | ") || "0m";
@@ -722,7 +756,7 @@ function refreshSessionInfoCard() {
   const predictedEnd = new Date(Date.now() + remainingTimelineSeconds() * 1000);
   const totalCommitmentSeconds = Math.floor((live.elapsedMs || 0) / 1000);
   const view = live.paused ? "paused" : (live.infoView || "end");
-  const rows = live.paused ? [["Session Ends", formatPredictedEnd(predictedEnd), "predicted"], ["Unplanned Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break", breakHistoryMarkup(false)]] : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
+  const rows = live.paused ? [["Session Ends", formatPredictedEnd(predictedEnd), "predicted"], ["Current Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break", breakHistoryMarkup(false)]] : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
   card.className = `session-info-card ${live.paused ? "is-paused" : ""} is-view-${view}`;
   card.innerHTML = sessionInfoRowsHtml(rows);
   bindEvents();
@@ -802,7 +836,7 @@ function updateLiveDisplay() {
   const breakTotal = document.querySelector("[data-session-info=\"break-total\"]");
   if (breakTotal) breakTotal.textContent = fmtDuration(Math.floor((live.unplannedBreakMs || 0)/1000));
   const breakCount = document.querySelector(".break-count");
-  if (breakCount) breakCount.textContent = `${(live.breakHistoryMs || []).length} Breaks`;
+  if (breakCount) breakCount.textContent = `${normalizeBreakHistory(live.breakHistory || live.breakHistoryMs).length} Unplanned Breaks`;
   const breakHistory = document.querySelector(".break-history");
   if (breakHistory) breakHistory.innerHTML = breakHistoryHtml(live.paused ? [live.currentBreakMs || 0] : []);
   const resumeSummary = document.querySelector("[data-session-info=\"resume-summary\"]");
@@ -980,7 +1014,7 @@ function modalView() {
   if (modal.type === "edit-record") {
     const record = modal.draft;
     if (!record) return "";
-    return `<div class="overlay"><section class="sheet"><p class="eyebrow">Study record</p><h2>Edit carefully</h2><label class="edit-label">Date<input class="field wide-field" data-record-field="date" value="${escapeHtml(record.date)}"></label><label class="edit-label">Total minutes<input class="field wide-field" type="number" min="0" data-record-field="totalMinutes" value="${Math.round((record.totalSeconds || 0) / 60)}"></label><label class="edit-label">Focused minutes<input class="field wide-field" type="number" min="0" data-record-field="focusedMinutes" value="${Math.round((record.focusedSeconds || 0) / 60)}"></label><label class="edit-label">Pomodoros<input class="field wide-field" type="number" min="0" data-record-field="completedPomodoros" value="${record.completedPomodoros || 0}"></label><label class="edit-label">Status<select class="field wide-field" data-record-field="status"><option ${record.status === "Completed" ? "selected" : ""}>Completed</option><option ${record.status === "Ended Early" ? "selected" : ""}>Ended Early</option></select></label><label class="edit-label">Reason<textarea class="reason-input compact" data-record-field="reason">${escapeHtml(record.reason || "")}</textarea></label><div class="sheet-actions"><button class="primary-btn" data-action="save-record-edit">Save changes</button><button class="tiny-btn" data-action="close-modal">Cancel</button></div></section></div>`;
+    return `<div class="overlay"><section class="sheet"><p class="eyebrow">Study record</p><h2>Edit carefully</h2><label class="edit-label">Date<input class="field wide-field" data-record-field="date" value="${escapeHtml(record.date)}"></label><label class="edit-label">Total minutes<input class="field wide-field" type="number" min="0" data-record-field="totalMinutes" value="${Math.round((record.totalSeconds || 0) / 60)}"></label><label class="edit-label">Focused minutes<input class="field wide-field" type="number" min="0" data-record-field="focusedMinutes" value="${Math.round((record.focusedSeconds || 0) / 60)}"></label><label class="edit-label">Pomodoros<input class="field wide-field" type="number" min="0" data-record-field="completedPomodoros" value="${record.completedPomodoros || 0}"></label><label class="edit-label">Status<select class="field wide-field" data-record-field="status"><option ${record.status === "Completed" ? "selected" : ""}>Completed</option><option ${record.status === "Ended Early" ? "selected" : ""}>Ended Early</option></select></label><label class="edit-label">Reason<textarea class="reason-input compact" data-record-field="reason">${escapeHtml(record.reason || "")}</textarea></label><div class="sheet-actions"><button class="primary-btn" data-action="save-record-edit">Save changes</button><button class="tiny-btn danger-lite" data-action="delete-record">Delete this record</button><button class="tiny-btn" data-action="close-modal">Cancel</button></div></section></div>`;
   }
   return "";
 }
@@ -1130,7 +1164,29 @@ function bindBreakReviewEvents() {
 }
 
 function exportProfile() {
-  const data = { schema: "focusapp.profile", version: "15.1", exportedAt: new Date().toISOString(), state, activeSession: live || null };
+  const activeSession = activeSessionSnapshot();
+  const data = {
+    schema: "focusapp.backup",
+    version: 2,
+    appVersion: "21",
+    exportedAt: new Date().toISOString(),
+    state,
+    activeSession,
+    backup: {
+      history: state.history || [],
+      stats: state.stats || {},
+      settings: {
+        theme: state.theme,
+        sound: state.sound,
+        paletteTheme: state.paletteTheme,
+        colorAssignments: state.colorAssignments,
+        breaks: state.breaks,
+        modes: state.modes,
+        subjects: state.subjects
+      },
+      activeSession
+    }
+  };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1142,12 +1198,21 @@ async function importProfile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
   if (!confirm("Import this profile and replace the current app data on this device?")) return;
-  const data = JSON.parse(await file.text());
-  state = normalizeState(data.state || data);
-  live = data.activeSession ? reconcileActiveSession(data.activeSession) : null;
-  saveState();
-  saveActiveSession();
-  render();
+  try {
+    const data = JSON.parse(await file.text());
+    const importedState = data?.state || data?.backup?.state || data;
+    if (!importedState || typeof importedState !== "object") throw new Error("No app data found in this file.");
+    state = normalizeState({ ...structuredClone(defaults), ...importedState });
+    const importedSession = data?.activeSession || data?.backup?.activeSession || null;
+    live = importedSession?.timeline?.length ? reconcileActiveSession(importedSession) : null;
+    saveState();
+    saveActiveSession();
+    render();
+  } catch (error) {
+    alert(`Import failed: ${error.message || "This file is not a valid FocusApp backup."}`);
+  } finally {
+    event.target.value = "";
+  }
 }
 function updateModalDraft(input) {
   const record = modal.draft;
@@ -1181,11 +1246,11 @@ function handleAction(event) {
   if (action === "show-end-reason") { live.endStep = "reason"; renderLive(); }
   if (action === "confirm-end-session" && live.endReason.trim()) finishSession("Ended Early", live.endReason);
   if (action === "home") { view = "dashboard"; render(); }
-  if (action === "clear-history") { if (confirm("Permanently delete all study history from this device?")) { state.history = []; saveState(); render(); } }
   if (action === "add-mode") { state.modes.push({ id: uid(), name: "Custom", hours: 7, note: "Your quiet plan" }); saveState(); render(); }
   if (action === "close-modal") { modal = null; render(); }
   if (action === "open-edit-record") { const record = state.history.find((item) => item.id === modal.id); modal = { type: "edit-record", id: modal.id, draft: { ...record } }; render(); }
   if (action === "save-record-edit") { state.history = state.history.map((item) => item.id === modal.id ? { ...modal.draft } : item); saveState(); modal = null; render(); }
+  if (action === "delete-record") { if (confirm("Delete this study record?")) { state.history = state.history.filter((item) => item.id !== modal.id); saveState(); modal = null; render(); } }
 }
 
 function skipCurrentBreak() {
@@ -1206,8 +1271,12 @@ function togglePause() {
   playToggleSound();
   if (live.paused) {
     const endedBreak = live.currentBreakMs || 0;
-    live.unplannedBreakMs = (live.unplannedBreakMs || 0) + endedBreak;
-    if (endedBreak > 0) live.breakHistoryMs = [endedBreak, ...(live.breakHistoryMs || [])];
+    if (endedBreak >= 15000) {
+      const history = normalizeBreakHistory(live.breakHistory || live.breakHistoryMs);
+      live.unplannedBreakMs = (live.unplannedBreakMs || 0) + endedBreak;
+      live.breakHistory = [{ id: uid(), durationMs: endedBreak, resumedAt: new Date().toISOString(), order: history.length ? Math.min(...history.map((entry) => entry.order)) - 1 : 0 }, ...history];
+      live.breakHistoryMs = live.breakHistory.map((entry) => entry.durationMs);
+    }
     live.currentBreakMs = 0;
     live.paused = false;
     live.infoView = "resumeSummary";
