@@ -2651,3 +2651,135 @@ body.pomodoro-active .app-shell.live-shell {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* v21.1 separate unplanned break history card */
+.session-info-card {
+  height: auto !important;
+  max-height: 82px !important;
+  min-height: 74px !important;
+}
+.session-info-card.is-paused,
+.session-info-card.is-view-breakTotal,
+.session-info-card.is-view-resumeSummary {
+  max-height: 82px !important;
+}
+.session-info-card .break-history,
+.session-info-card .break-count,
+.session-info-card .resume-history {
+  display: none !important;
+}
+.break-history-card {
+  position: absolute;
+  z-index: 8;
+  top: calc(max(18px, env(safe-area-inset-top)) + 92px);
+  left: max(20px, env(safe-area-inset-left));
+  width: 224px;
+  height: 268px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.3);
+  background: rgba(247,241,232,.92);
+  color: #17202a;
+  text-align: left;
+  box-shadow: 0 14px 32px rgba(0,0,0,.16);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 230ms ease-in-out, transform 230ms ease-in-out;
+  overflow: hidden;
+}
+.break-history-card.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-duration: 280ms;
+  transition-timing-function: ease-out;
+}
+.break-history-head {
+  display: grid;
+  gap: 5px;
+}
+.break-history-head small {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: .02em;
+  color: rgba(23,32,42,.58);
+}
+.break-history-head span {
+  font-size: 13px;
+  font-weight: 900;
+  color: rgba(23,32,42,.76);
+}
+.break-history-list {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-right: 2px;
+}
+.break-history-list::-webkit-scrollbar { display: none; }
+.break-history-entry {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  border-bottom: 1px solid rgba(23,32,42,.24);
+  color: #17202a;
+  animation: breakEntryIn 280ms ease-out both;
+  animation-delay: calc(var(--entry-index, 0) * 28ms);
+}
+.break-history-entry .break-dot {
+  font-size: 15px;
+  line-height: 1;
+  color: rgba(23,32,42,.74);
+}
+.break-history-entry strong,
+.break-history-entry time {
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.break-history-entry time {
+  justify-self: end;
+  color: rgba(23,32,42,.82);
+}
+.break-history-empty {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 850;
+  color: rgba(23,32,42,.68);
+}
+.break-history-empty span { color: rgba(23,32,42,.48); }
+.break-history-card footer {
+  text-align: center;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 950;
+  color: rgba(23,32,42,.5);
+}
+@keyframes breakEntryIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (orientation: portrait) {
+  body.pomodoro-active .break-history-card {
+    top: calc(max(14px, env(safe-area-inset-top)) + 88px) !important;
+    left: max(16px, env(safe-area-inset-left)) !important;
+    width: 224px !important;
+    height: 244px !important;
+  }
+}
