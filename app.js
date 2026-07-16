@@ -455,7 +455,7 @@ function customization() {
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Version 23</p>
+    <p class="app-version">Version 24</p>
   `;
 }
 function colorName(color, index) {
@@ -709,7 +709,10 @@ function sessionInfoCard(predictedEnd, totalCommitmentSeconds) {
         ["Current Break", fmtDuration(Math.floor((live.currentBreakMs || 0) / 1000)), "current-break"]
       ]
     : [sessionInfoRow(view, predictedEnd, totalCommitmentSeconds)];
-  return `<button class="session-info-card ${live.paused ? "is-paused" : ""} is-view-${view}" data-action="cycle-session-info">${sessionInfoRowsHtml(rows)}</button>`;
+  return `${live.paused ? pausedSessionEndCard(predictedEnd) : ""}<button class="session-info-card ${live.paused ? "is-paused" : ""} is-view-${view}" data-action="cycle-session-info">${sessionInfoRowsHtml(rows)}</button>`;
+}
+function pausedSessionEndCard(predictedEnd) {
+  return `<aside class="session-info-card paused-end-card is-view-end"><span class="session-info-row is-predicted"><small>Session Ends</small><strong data-session-info="paused-predicted">${formatPredictedEnd(predictedEnd)}</strong></span></aside>`;
 }
 function sessionInfoRowsHtml(rows) {
   return rows.map(([label, value, key, extra]) => `<span class="session-info-row is-${key}"><small>${label}</small><strong data-session-info="${key}">${value}</strong>${extra || ""}</span>`).join("");
@@ -866,6 +869,8 @@ function updateLiveDisplay() {
   }
   const predicted = document.querySelector("[data-session-info=\"predicted\"]");
   if (predicted) predicted.textContent = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
+  const pausedPredicted = document.querySelector("[data-session-info=\"paused-predicted\"]");
+  if (pausedPredicted) pausedPredicted.textContent = formatPredictedEnd(new Date(Date.now() + remainingTimelineSeconds() * 1000));
   const breakTotal = document.querySelector("[data-session-info=\"break-total\"]");
   if (breakTotal) breakTotal.textContent = unplannedBreakSummary();
   const resumeSummary = document.querySelector("[data-session-info=\"resume-summary\"]");
@@ -1246,7 +1251,7 @@ function exportProfile() {
   const data = {
     schema: "focusapp.backup",
     version: 2,
-    appVersion: "23",
+    appVersion: "24",
     exportedAt: new Date().toISOString(),
     state,
     activeSession,

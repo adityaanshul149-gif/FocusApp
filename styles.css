@@ -2886,3 +2886,41 @@ body.pomodoro-active .app-shell.live-shell {
     height: 150px !important;
   }
 }
+
+/* v23.1 cyclic card sizing and paused end companion */
+.session-info-card {
+  width: 222px !important;
+}
+.break-history-card {
+  width: 222px !important;
+  height: 154px !important;
+}
+.paused-end-card {
+  left: calc(max(20px, env(safe-area-inset-left)) + 234px) !important;
+  pointer-events: none !important;
+}
+@media (orientation: portrait) {
+  body.pomodoro-active .session-info-card {
+    width: 222px !important;
+  }
+  body.pomodoro-active .break-history-card {
+    width: 222px !important;
+    height: 146px !important;
+  }
+  body.pomodoro-active .paused-end-card {
+    left: calc(max(16px, env(safe-area-inset-left)) + 234px) !important;
+  }
+}
+@media (max-width: 560px) and (orientation: portrait) {
+  body.pomodoro-active .paused-end-card {
+    left: max(16px, env(safe-area-inset-left)) !important;
+    top: calc(max(14px, env(safe-area-inset-top)) + 82px) !important;
+  }
+  body.pomodoro-active .session-info-card.is-paused {
+    top: max(14px, env(safe-area-inset-top)) !important;
+    left: max(16px, env(safe-area-inset-left)) !important;
+  }
+  body.pomodoro-active .break-history-card {
+    top: calc(max(14px, env(safe-area-inset-top)) + 166px) !important;
+  }
+}
