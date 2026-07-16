@@ -2783,3 +2783,65 @@ body.pomodoro-active .app-shell.live-shell {
     height: 244px !important;
   }
 }
+
+/* v22 audio reliability status */
+.sound-status {
+  position: fixed;
+  z-index: 220;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translate(-50%, 10px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(16, 18, 22, .92);
+  color: #f7f1e8;
+  box-shadow: 0 14px 42px rgba(0,0,0,.32);
+  font-size: 13px;
+  font-weight: 950;
+  opacity: 0;
+  animation: soundStatusIn 280ms ease-out forwards;
+  backdrop-filter: blur(14px);
+}
+.sound-status.is-failed { border-color: rgba(255, 194, 120, .5); }
+.sound-status button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(247,241,232,.14);
+  color: #f7f1e8;
+  font-size: 12px;
+  font-weight: 950;
+}
+.sound-status.is-hiding {
+  animation: soundStatusOut 230ms ease-in-out forwards;
+}
+.audio-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: grid;
+  place-items: center;
+  background: rgba(5,5,6,.9);
+  color: #f7f1e8;
+  font-size: clamp(44px, 12vw, 110px);
+  font-weight: 950;
+  letter-spacing: 0;
+  animation: audioFallbackFlash 900ms ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes soundStatusIn {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes soundStatusOut {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, 8px); }
+}
+@keyframes audioFallbackFlash {
+  from { opacity: .72; }
+  to { opacity: 1; }
+}

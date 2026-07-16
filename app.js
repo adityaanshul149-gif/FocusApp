@@ -102,6 +102,8 @@ let ticker = null;
 let timelineTimer = null;
 let modal = null;
 let audioContext = null;
+let soundStatusTimer = null;
+let lastSoundReady = false;
 
 const app = document.querySelector("#app");
 
@@ -453,7 +455,7 @@ function customization() {
     <section class="panel"><div class="panel-head"><div><h2>Select chime</h2><p class="eyebrow">Long high-pitch alerts for iPhone PWA</p></div><button class="tiny-btn" data-action="test-chime">Test</button></div><div class="sound-grid">${soundOptions().map((sound) => `<button class="chip ${state.sound === sound.id ? "active" : ""}" data-sound="${sound.id}">${sound.name}</button>`).join("")}</div></section>
     <section class="panel"><div class="panel-head"><div><h2>Profiles</h2><p class="eyebrow">Backup or restore all app data</p></div></div><div class="profile-actions"><button class="soft-btn" data-action="export-profile">Export JSON</button><label class="soft-btn import-label">Import JSON<input type="file" accept="application/json,.json,.txt" data-import-profile hidden></label></div></section>
     <section class="panel"><div class="panel-head"><h2>Themes</h2></div><div class="theme-grid">${Object.entries(appThemes).map(([id, theme]) => `<button class="theme-card ${state.theme === id ? "active" : ""}" data-theme="${id}" style="--theme-accent:${theme.accent}; --theme-bg:${theme.bg}; --theme-panel:${theme.panel}"><span></span><strong>${theme.name}</strong><small>${themeMood(id)}</small></button>`).join("")}</div></section>
-    <p class="app-version">Focus app version 21.1</p>
+    <p class="app-version">Focus app version 22</p>
   `;
 }
 function colorName(color, index) {
@@ -967,9 +969,10 @@ function applySessionStats(hours, subjects) {
 function heatLevel(hours) { return hours >= 8 ? 3 : hours >= 4 ? 2 : hours > 0 ? 1 : 0; }
 
 async function playCompletionChime() { return playMainNotification(); }
-async function playMainNotification() {
+async function playMainNotification(retried = false) {
   try {
-    await unlockAudio();
+    await recoverAudioSystem();
+    if (!audioContext || audioContext.state !== "running") throw new Error("Audio context is not running");
     const now = audioContext.currentTime;
     const selected = soundOptions().find((sound) => sound.id === state.sound) || soundOptions()[0];
     const master = audioContext.createGain();
@@ -988,8 +991,18 @@ async function playMainNotification() {
       osc.start(now);
       osc.stop(now + 3.05);
     });
+    lastSoundReady = true;
+    return true;
   } catch (error) {
-    console.warn("Chime could not play", error);
+    if (!retried) {
+      resetAudioSystem();
+      await recoverAudioSystem();
+      return playMainNotification(true);
+    }
+    lastSoundReady = false;
+    showSoundStatus(false);
+    showAudioFallback();
+    return false;
   }
 }
 async function playCountdownBeep() {
@@ -1027,11 +1040,49 @@ async function playToggleSound() {
     });
   } catch {}
 }
-async function unlockAudio() {
+function resetAudioSystem() {
+  try { if (audioContext && audioContext.state !== "closed") audioContext.close(); } catch {}
+  audioContext = null;
+}
+async function recoverAudioSystem() {
   try {
-    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (!window.AudioContext && !window.webkitAudioContext) return false;
+    if (!audioContext || audioContext.state === "closed") audioContext = new (window.AudioContext || window.webkitAudioContext)();
     if (audioContext.state === "suspended") await audioContext.resume();
-  } catch {}
+    lastSoundReady = audioContext.state === "running";
+    return lastSoundReady;
+  } catch {
+    lastSoundReady = false;
+    return false;
+  }
+}
+async function unlockAudio() {
+  await recoverAudioSystem();
+}
+async function checkSoundReady(show = true) {
+  const ready = await recoverAudioSystem();
+  if (show) showSoundStatus(ready);
+  return ready;
+}
+function showSoundStatus(ready) {
+  document.querySelector(".sound-status")?.remove();
+  const el = document.createElement("div");
+  el.className = `sound-status ${ready ? "is-ready" : "is-failed"}`;
+  el.innerHTML = `<span>${ready ? "✓ Sound Ready" : "⚠ Sound Not Ready"}</span><button type="button" data-action="test-chime">Test</button>`;
+  document.body.appendChild(el);
+  clearTimeout(soundStatusTimer);
+  soundStatusTimer = setTimeout(() => {
+    el.classList.add("is-hiding");
+    setTimeout(() => el.remove(), 260);
+  }, 6000);
+}
+function showAudioFallback() {
+  const target = document.querySelector(".study-mode") || app;
+  const banner = document.createElement("div");
+  banner.className = "audio-fallback";
+  banner.textContent = "Time's Up";
+  target.appendChild(banner);
+  setTimeout(() => banner.remove(), 2400);
 }
 function modalView() {
   if (modal.type === "edit-confirm") return `<div class="overlay"><section class="sheet"><p class="eyebrow">Edit history</p><h2>Are you sure you want to edit this study record?</h2><p class="copy">A little friction keeps your record trustworthy.</p><div class="sheet-actions"><button class="primary-btn" data-action="open-edit-record">Yes, edit</button><button class="tiny-btn" data-action="close-modal">Cancel</button></div></section></div>`;
@@ -1192,7 +1243,7 @@ function exportProfile() {
   const data = {
     schema: "focusapp.backup",
     version: 2,
-    appVersion: "21.1",
+    appVersion: "22",
     exportedAt: new Date().toISOString(),
     state,
     activeSession,
@@ -1258,7 +1309,7 @@ function handleAction(event) {
   if (action === "confirm-plan") { flow.timeline = buildTimeline(flow.plan); flow.step = "breaks"; render(); }
   if (action === "back-to-plan") { flow.step = "plan"; render(); }
   if (action === "start-reviewed-session") startLive();
-  if (action === "test-chime") playMainNotification();
+  if (action === "test-chime") testSelectedSound();
   if (action === "pause-live") togglePause();
   if (action === "cycle-session-info") cycleSessionInfo();
   if (action === "export-profile") exportProfile();
@@ -1369,7 +1420,21 @@ document.addEventListener("touchend", (event) => {
   if (now - lastTouchEnd <= 300) event.preventDefault();
   lastTouchEnd = now;
 }, { passive: false });
-document.addEventListener("visibilitychange", saveActiveSession);
+async function testSelectedSound() {
+  const ok = await playMainNotification();
+  if (ok) lastSoundReady = true;
+  showSoundStatus(ok);
+}
+function handleAudioReturn() {
+  saveActiveSession();
+  checkSoundReady(true);
+}
+document.addEventListener("visibilitychange", () => {
+  saveActiveSession();
+  if (!document.hidden) handleAudioReturn();
+});
+window.addEventListener("focus", handleAudioReturn);
+window.addEventListener("pageshow", handleAudioReturn);
 window.addEventListener("pagehide", saveActiveSession);
 window.addEventListener("beforeunload", saveActiveSession);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
